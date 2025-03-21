@@ -141,6 +141,57 @@ cities = {
     "Diourbel": 0.03, "Louga": 0.03, "Tambacounda": 0.03
 }
 
+def generate_senegal_address(city):
+    """Génère une adresse au format sénégalais cohérente avec la ville"""
+        
+    # Types de voies au Sénégal
+    street_types = ["Avenue", "Rue", "Boulevard", "Allée", "Place", "Route de"]
+        
+    # Quartiers par ville (ajouter selon besoin)
+    neighborhoods = {
+        "Dakar": ["Plateau", "Médina", "Fann", "Mermoz", "Sacré-Cœur", "Ouakam", "Almadies", "Yoff", "Ngor", "Point E", "Liberté"],
+        "Thiès": ["Randoulène", "Cité Ballabey", "Mbour 1", "Mbour 2", "Thialy"],
+        "Touba": ["Darou Marnane", "Darou Miname", "Guédé", "Ndamatou"],
+        "Rufisque": ["Diokoul", "Keury Souf", "Keury Kaw", "Colobane"],
+        "Saint-Louis": ["Guet Ndar", "Sor", "Île Nord", "Île Sud", "Ndiolofène"],
+        "Mbour": ["Escale", "Mbour Sérère", "Diamaguène", "Téfess"],
+        "Kaolack": ["Médina Baye", "Leona", "Kasaville", "Dialègne"],
+    }
+        
+    # Noms sénégalais pour les rues (personnalités, lieux, etc.)
+    street_names = [
+        "Léopold Sédar Senghor", "Blaise Diagne", "Lat Dior", "El Hadj Malick Sy", 
+        "Cheikh Anta Diop", "Samory Touré", "Lamine Guèye", "Macky Sall", 
+        "Abdou Diouf", "Ousmane Sonko", "Abdoulaye Wade", "Serigne Touba",
+        "de l'Indépendance", "de la République", "du Sahel", "de la Liberté",
+        "de la Paix", "de l'Unité Africaine", "du Baobab", "des Niayes"
+    ]
+        
+    # Choisir éléments pour l'adresse
+    street_type = random.choice(street_types)
+    street_name = random.choice(street_names)
+        
+    # Choisir un quartier correspondant à la ville, ou générer un nom générique si la ville n'est pas listée
+    if city in neighborhoods:
+        neighborhood = random.choice(neighborhoods[city])
+    else:
+        neighborhood = f"Quartier {random.choice(['Centre', 'Nord', 'Sud', 'Est', 'Ouest', 'Nouveau'])}"
+        
+    # Numéro de rue (moins élevé que dans les adresses françaises)
+    number = random.randint(1, 120)
+        
+    # Format d'adresse sénégalais (avec variations)
+    address_formats = [
+        f"{number}, {street_type} {street_name}, {neighborhood}",
+        f"{street_type} {street_name}, N°{number}, {neighborhood}",
+        f"Villa N°{number}, {street_type} {street_name}, {neighborhood}",
+        f"{neighborhood}, {number} {street_type} {street_name}",
+        f"{street_type} {street_name}, {neighborhood}, Lot N°{number}"
+    ]
+        
+    return random.choice(address_formats)
+
+
 # Senegalese phone number formats
 def generate_senegal_phone():
     # Préfixes mobiles sénégalais
@@ -177,6 +228,15 @@ def generate_customers(num_customers=1000):
     
     for _ in range(num_customers):
         customer_id = str(uuid.uuid4())
+
+        gender = random.choices(["F", "M", "Autre"], weights=[0.8, 0.15, 0.05])[0]
+        male_names = [name for name in senegalese_first_names if name not in ["Fatou", "Aminata", "Aïssatou", "Rokhaya", "Mariama", "Awa", "Khady", "Dieynaba", "Sokhna", "Ndeye", "Astou", "Fatoumata", "Rama", "Mame", "Adja", "Sophie", "Coumba", "Nabou", "Soda", "Bineta", "Yacine", "Bintou", "Fama", "Ramatoulaye", "Safiétou", "Dior", "Yaye", "Tening", "Mbayang", "Penda", "Maty", "Kiné", "Seynabou", "Fari", "Adjara", "Salimata", "Marième", "Anta", "Saly", "Oumy", "Marème", "Tida", "Diarra", "Ndèye", "Diouma", "Magatte", "Ndella", "Kadija", "Maïmouna", "Tata", "Ndioro", "Yandé", "Diama", "Codou", "Bérénice", "Aissatou", "Amy", "Ngoné", "Mbathio"]]
+        female_names = ["Fatou", "Aminata", "Aïssatou", "Rokhaya", "Mariama", "Awa", "Khady", "Dieynaba", "Sokhna", "Ndeye", "Astou", "Fatoumata", "Rama", "Mame", "Adja", "Sophie", "Coumba", "Nabou", "Soda", "Bineta", "Yacine", "Bintou", "Fama", "Ramatoulaye", "Safiétou", "Dior", "Yaye", "Tening", "Mbayang", "Penda", "Maty", "Kiné", "Seynabou", "Fari", "Adjara", "Salimata", "Marième", "Anta", "Saly", "Oumy", "Marème", "Tida", "Diarra", "Ndèye", "Diouma", "Magatte", "Ndella", "Kadija", "Maïmouna", "Tata", "Ndioro", "Yandé", "Diama", "Codou", "Bérénice", "Aissatou", "Amy", "Ngoné", "Mbathio"]
+        
+        if gender == "F":
+            first_name = random.choice(female_names)
+        elif gender == "M":
+            first_name = random.choice(male_names)
         
         # Basic information
         first_name, last_name = generate_senegalese_name()
@@ -235,8 +295,7 @@ def generate_customers(num_customers=1000):
             f"{random.randint(55, 65)}"
         ], weights=[0.2, 0.35, 0.25, 0.15, 0.05])[0]
         
-        # Gender (primarily women for cosmetics)
-        gender = random.choices(["F", "M", "Autre"], weights=[0.8, 0.15, 0.05])[0]
+        address = generate_senegal_address(city) if has_purchased else None
         
         # Email subscription and engagement
         is_subscribed = random.random() < 0.75  # 75% are subscribed to emails
@@ -251,7 +310,7 @@ def generate_customers(num_customers=1000):
             "phone": phone,
             "city": city,
             "region": region,
-            "address": fake.street_address() if has_purchased else None,
+            "address": address,
             "registration_date": registration_date.strftime("%Y-%m-%d %H:%M:%S"),
             "first_purchase_date": first_purchase_date.strftime("%Y-%m-%d %H:%M:%S") if first_purchase_date else None,
             "last_purchase_date": last_purchase_date.strftime("%Y-%m-%d %H:%M:%S") if last_purchase_date else None,
@@ -526,7 +585,7 @@ num_orders = 3000
 
 # Generate customer data
 print("Generating customer data...")
-customers_data = generate_customers(num_customers)
+customers_data = generate_customers(num_customers=1000)
 customers_df = pd.DataFrame(customers_data)
 
 # Save customer data
