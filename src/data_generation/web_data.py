@@ -13,7 +13,9 @@ fake = Faker(['fr_FR'])  # French is widely spoken in Senegal
 fake_sn = Faker(['en_US'])  # For non-locale specific items
 
 # Create output directory if it doesn't exist
-os.makedirs('data', exist_ok=True)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw')
+os.makedirs(output_dir, exist_ok=True)
 
 class WebEventGenerator:
     def __init__(self, crm_ids=None, campaign_ids=None):
@@ -439,7 +441,7 @@ num_sessions = 5000  # Adjust as needed
 logs_data = generate_web_logs(num_sessions)
 
 # Save as JSON (for streaming simulation)
-with open('data/raw/web_logs.json', 'w') as f:
+with open(os.path.join(output_dir, 'web_logs.json'), 'w') as f:
     for log in logs_data:
         f.write(json.dumps(log) + '\n')
 
