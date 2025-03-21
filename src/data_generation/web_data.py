@@ -51,8 +51,123 @@ senegalese_last_names = [
     "Sow", "Bocar", "Barry", "Khouma"
 ]
 
+senegal_admin_structure = {
+    "Dakar": {
+        "region": "Dakar",
+        "cities": ["Dakar", "Pikine", "Guédiawaye", "Rufisque", "Bargny", "Diamniadio"]
+    },
+    "Thiès": {
+        "region": "Thiès",
+        "cities": ["Thiès", "Mbour", "Tivaouane", "Joal-Fadiouth", "Kayar", "Pout"]
+    },
+    "Saint-Louis": {
+        "region": "Saint-Louis",
+        "cities": ["Saint-Louis", "Richard-Toll", "Dagana", "Podor"]
+    },
+    "Diourbel": {
+        "region": "Diourbel",
+        "cities": ["Diourbel", "Touba", "Mbacké", "Bambey"]
+    },
+    "Fatick": {
+        "region": "Fatick",
+        "cities": ["Fatick", "Kaolack", "Gossas", "Foundiougne"]
+    },
+    "Kaolack": {
+        "region": "Kaolack",
+        "cities": ["Kaolack", "Nioro du Rip", "Guinguinéo"]
+    },
+    "Kaffrine": {
+        "region": "Kaffrine",
+        "cities": ["Kaffrine", "Koungheul", "Malem Hodar"]
+    },
+    "Kédougou": {
+        "region": "Kédougou",
+        "cities": ["Kédougou", "Salémata", "Saraya"]
+    },
+    "Kolda": {
+        "region": "Kolda",
+        "cities": ["Kolda", "Vélingara", "Médina Yoro Foulah"]
+    },
+    "Louga": {
+        "region": "Louga",
+        "cities": ["Louga", "Linguère", "Kébémer"]
+    },
+    "Matam": {
+        "region": "Matam",
+        "cities": ["Matam", "Kanel", "Ranérou"]
+    },
+    "Sédhiou": {
+        "region": "Sédhiou",
+        "cities": ["Sédhiou", "Goudomp", "Bounkiling"]
+    },
+    "Tambacounda": {
+        "region": "Tambacounda",
+        "cities": ["Tambacounda", "Bakel", "Goudiry", "Koumpentoum"]
+    },
+    "Ziguinchor": {
+        "region": "Ziguinchor",
+        "cities": ["Ziguinchor", "Bignona", "Oussouye"]
+    }
+}
+all_regions = list(senegal_admin_structure.keys())
+all_cities = []
+city_to_region_map = {}
+
+for region, data in senegal_admin_structure.items():
+    for city in data["cities"]:
+        all_cities.append(city)
+        city_to_region_map[city] = region
+
 
 class WebEventGenerator:
+
+    def load_existing_ids():
+        """Charge les IDs CRM et les IDs de campagne existants depuis les fichiers générés"""
+        crm_ids = []
+        campaign_ids = []
+        
+        # Tenter de charger les IDs CRM depuis le fichier customers.csv
+        try:
+            customers_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'customers.csv')
+            if os.path.exists(customers_path):
+                customers_df = pd.read_csv(customers_path)
+                if 'customer_id' in customers_df.columns:
+                    crm_ids = customers_df['customer_id'].tolist()
+                print(f"Chargé {len(crm_ids)} IDs clients depuis {customers_path}")
+        except Exception as e:
+            print(f"Erreur lors du chargement des IDs CRM: {e}")
+        
+        # Tenter de charger les IDs de campagne depuis les fichiers d'advertising
+        try:
+            # Essayer google_ads.csv
+            ads_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'google_ads.csv')
+            if os.path.exists(ads_path):
+                ads_df = pd.read_csv(ads_path)
+                if 'campaign_id' in ads_df.columns:
+                    campaign_ids.extend(ads_df['campaign_id'].unique().tolist())
+            
+            # Essayer social_ads.csv
+            social_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'social_ads.csv')
+            if os.path.exists(social_path):
+                social_df = pd.read_csv(social_path)
+                if 'campaign_id' in social_df.columns:
+                    campaign_ids.extend(social_df['campaign_id'].unique().tolist())
+                    
+            # Essayer influencer_campaigns.csv
+            inf_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'influencer_campaigns.csv')
+            if os.path.exists(inf_path):
+                inf_df = pd.read_csv(inf_path)
+                if 'campaign_id' in inf_df.columns:
+                    campaign_ids.extend(inf_df['campaign_id'].unique().tolist())
+                    
+            campaign_ids = list(set(campaign_ids))  # Éliminer les doublons
+            print(f"Chargé {len(campaign_ids)} IDs de campagne depuis les fichiers d'advertising")
+        except Exception as e:
+            print(f"Erreur lors du chargement des IDs de campagne: {e}")
+        
+        return crm_ids, campaign_ids
+
+
     def __init__(self, crm_ids=None, campaign_ids=None):
         """Initialize the web event generator with optional CRM and campaign IDs for data alignment"""
         # Allow injection of IDs from other sources for alignment
@@ -321,10 +436,6 @@ class WebEventGenerator:
             weights=list(self.browsers.values())
         )[0]
         
-        city = random.choices(
-            list(self.cities.keys()),
-            weights=list(self.cities.values())
-        )[0]
         
         ip_address = self.generate_sn_ip()
         is_mobile = "mobile" in device_type
@@ -332,6 +443,9 @@ class WebEventGenerator:
         # Marketing attribution
         traffic_source = random.choice(self.traffic_sources)
         traffic_medium = random.choice(self.utm_mediums)
+
+        city = random.choices(all_cities, weights=[self.cities.get(c, 0.01) for c in all_cities])[0]
+        region = city_to_region_map[city]
         
         # Base event data
         event_base = {
@@ -351,8 +465,7 @@ class WebEventGenerator:
             "location": {
                 "country": "Sénégal",
                 "city": city,
-                "region": random.choice(["Dakar", "Thiès", "Saint-Louis", "Diourbel", "Fatick", "Kaolack", "Kaffrine", 
-                                       "Kédougou", "Kolda", "Louga", "Matam", "Sédhiou", "Tambacounda", "Ziguinchor"]),
+                "region": region,
                 "ip_address": ip_address,
                 "language": "fr" if random.random() < 0.9 else "en"  # 90% French, 10% English
             },
