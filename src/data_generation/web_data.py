@@ -383,19 +383,69 @@ class WebEventGenerator:
                 "category": product["categorie"],
                 "quantity": quantity
             }
+        return event_base
+
+
+def generate_web_logs(num_sessions):
+    """Generate web logs for the specified number of sessions"""
+    logs_data = []
+        
+    # Create generator instance
+    generator = WebEventGenerator()
+        
+    for _ in range(num_sessions):
+        # Create a new session
+        session_id = generator.generate_session()
+            
+        # Decide if user is authenticated
+        is_authenticated = random.random() < 0.3  # 30% of sessions are authenticated
+        user = generator.generate_user(authenticated=is_authenticated)
+            
+        # Generate between 1 and 20 events per session
+        num_events = random.randint(1, 20)
+            
+        # Session timestamp (starting point)
+        session_start = fake.date_time_this_month()
+            
+        # Track current URL as we navigate
+        current_url = None
+            
+        for i in range(num_events):
+            # Events happen with small time increments (1-5 minutes)
+            current_time = session_start + datetime.timedelta(minutes=i*random.randint(1, 5))
+                
+            # Generate event
+            event = generator.generate_event(
+                session_id=session_id, 
+                user=user, 
+                current_url=current_url, 
+                timestamp=current_time
+            )
+                
+            # Check if event is not None before processing
+            if event is not None:
+                # Update current URL for next event
+                if "page" in event and "url" in event["page"]:
+                    current_url = event["page"]["url"].replace("https://www.biocosmetics.sn", "")
+                elif "product" in event and "url" in event["product"]:
+                    current_url = event["product"]["url"].replace("https://www.biocosmetics.sn", "")
+                    
+                logs_data.append(event)
+        
+    return logs_data
 
 # Generate logs
 num_sessions = 5000  # Adjust as needed
 logs_data = generate_web_logs(num_sessions)
 
 # Save as JSON (for streaming simulation)
-with open('data/web_logs.json', 'w') as f:
+with open('data/raw/web_logs.json', 'w') as f:
     for log in logs_data:
         f.write(json.dumps(log) + '\n')
 
 # Also save as CSV for easier analysis
 df = pd.DataFrame(logs_data)
-df.to_csv('data/web_logs.csv', index=False)
+df.to_csv('data/raw/web_logs.csv', index=False)
 
 print(f"Generated {len(logs_data)} web log events from {num_sessions} sessions")
 print(f"Files saved to 'data/web_logs.json' and 'data/web_logs.csv'")
