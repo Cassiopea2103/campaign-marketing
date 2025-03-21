@@ -13,7 +13,7 @@ Faker.seed(42)  # For reproducibility
 
 # Create output directory if it doesn't exist
 base_dir = os.path.dirname(os.path.abspath(__file__))
-output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw')
+output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw', 'crm')
 os.makedirs(output_dir, exist_ok=True)
 
 
@@ -589,8 +589,8 @@ customers_data = generate_customers(num_customers=1000)
 customers_df = pd.DataFrame(customers_data)
 
 # Save customer data
-customers_df.to_csv('data/raw/customers.csv', index=False)
-print(f"Saved {len(customers_df)} customer records to 'data/raw/customers.csv'")
+customers_df.to_csv('data/raw/crm/customers.csv', index=False)
+print(f"Saved {len(customers_df)} customer records to 'data/raw/crm/customers.csv'")
 
 # Generate order data
 print("Generating order data...")
@@ -601,8 +601,8 @@ for order in orders_data:
     order['items'] = str(order['items'])
 
 orders_df = pd.DataFrame(orders_data)
-orders_df.to_csv('data/raw/orders.csv', index=False)
-print(f"Saved {len(orders_df)} order records to 'data/raw/orders.csv'")
+orders_df.to_csv('data/raw/crm/orders.csv', index=False)
+print(f"Saved {len(orders_df)} order records to 'data/raw/crm/orders.csv'")
 
 # Preview the data
 print("\nCustomer Data Preview:")

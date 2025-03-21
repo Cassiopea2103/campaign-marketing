@@ -14,7 +14,7 @@ fake_sn = Faker(['en_US'])  # For non-locale specific items
 
 # Create output directory if it doesn't exist
 base_dir = os.path.dirname(os.path.abspath(__file__))
-output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw')
+output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw', 'web')
 os.makedirs(output_dir, exist_ok=True)
 json_file_path = os.path.join(output_dir, 'web_logs.json')
 csv_file_path = os.path.join(output_dir, 'web_logs.csv')
@@ -128,7 +128,7 @@ class WebEventGenerator:
         
         # Tenter de charger les IDs CRM depuis le fichier customers.csv
         try:
-            customers_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'customers.csv')
+            customers_path = os.path.join(base_dir, '..', '..', 'data', 'raw','crm', 'customers.csv')
             if os.path.exists(customers_path):
                 customers_df = pd.read_csv(customers_path)
                 if 'customer_id' in customers_df.columns:
@@ -140,21 +140,21 @@ class WebEventGenerator:
         # Tenter de charger les IDs de campagne depuis les fichiers d'advertising
         try:
             # Essayer google_ads.csv
-            ads_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'google_ads.csv')
+            ads_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising' , 'google_ads.csv')
             if os.path.exists(ads_path):
                 ads_df = pd.read_csv(ads_path)
                 if 'campaign_id' in ads_df.columns:
                     campaign_ids.extend(ads_df['campaign_id'].unique().tolist())
             
             # Essayer social_ads.csv
-            social_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'social_ads.csv')
+            social_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising' ,  'social_ads.csv')
             if os.path.exists(social_path):
                 social_df = pd.read_csv(social_path)
                 if 'campaign_id' in social_df.columns:
                     campaign_ids.extend(social_df['campaign_id'].unique().tolist())
                     
             # Essayer influencer_campaigns.csv
-            inf_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'influencer_campaigns.csv')
+            inf_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising' , 'influencer_campaigns.csv')
             if os.path.exists(inf_path):
                 inf_df = pd.read_csv(inf_path)
                 if 'campaign_id' in inf_df.columns:
@@ -636,7 +636,7 @@ except Exception as e:
     print(f"Erreur lors de l'écriture du fichier CSV: {e}")
 
 print(f"Generated {len(logs_data)} web log events from {num_sessions} sessions")
-print(f"Files saved to 'data/web_logs.json' and 'data/web_logs.csv'")
+print(f"Files saved to 'data/web/web_logs.json' and 'data/web/web_logs.csv'")
 
 # Preview some data
 print("\nPreview of generated data:")

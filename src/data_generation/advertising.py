@@ -6,12 +6,52 @@ from faker import Faker
 import os
 import uuid
 
-# Set up Faker with locale support
-fake = Faker(['fr_SN', 'fr_FR'])
+# Set up Faker with locale support - correction du locale non supporté fr_SN
+fake = Faker(['fr_FR'])  # Utilisation seulement de fr_FR au lieu de fr_SN
 Faker.seed(42)  # For reproducibility
 
+# Ajout des noms et prénoms sénégalais
+senegalese_first_names = [
+    "Mamadou", "Abdoulaye", "Ousmane", "Modou", "Ibrahima", "Cheikh", "Moussa", "Assane",
+    "Pape", "Idrissa", "Alioune", "Mbaye", "Samba", "Babacar", "Seydou", "Omar", "Aliou",
+    "Gora", "Demba", "Boubacar", "Maguette", "Serigne", "Malick", "Daouda", "Amadou",
+    "Lamine", "Pathé", "Souleymane", "Youssou", "Ismaïla", "Mouhamed", "Tidiane", "Bocar",
+    "Mor", "Abdoul", "Bassirou", "Ababacar", "Landing", "Thierno", "Bara", "Mamour",
+    "Massamba", "El Hadji", "Diaga", "Saliou", "Ilyass", "Karim", "Moustapha", "Ndiaga",
+    "Fadel", "Birame", "Mansour", "Doudou", "Boucounta", "Gorgui", "Habib", "Ablaye",
+    "Sidy", "Bamba", "Saër", "Madické", "Saïdou", "Malal", "Falilou", "Khadim", "Malamine",
+    "Fatou", "Aminata", "Aïssatou", "Rokhaya", "Mariama", "Awa", "Khady", "Dieynaba",
+    "Sokhna", "Ndeye", "Astou", "Fatoumata", "Rama", "Mame", "Adja", "Sophie", "Coumba",
+    "Nabou", "Soda", "Bineta", "Yacine", "Bintou", "Fama", "Ramatoulaye", "Safiétou",
+    "Dior", "Yaye", "Tening", "Mbayang", "Penda", "Maty", "Kiné", "Seynabou", "Fari",
+    "Adjara", "Salimata", "Marième", "Anta", "Saly", "Oumy", "Marème", "Tida", "Diarra",
+    "Ndèye", "Diouma", "Magatte", "Ndella", "Kadija", "Maïmouna", "Tata", "Ndioro",
+    "Yandé", "Diama", "Codou", "Bérénice", "Aissatou", "Amy", "Ngoné", "Mbathio"
+]
+
+senegalese_last_names = [
+    "Diop", "Ndiaye", "Fall", "Gueye", "Seck", "Mbaye", "Diouf", "Diallo", "Cissé",
+    "Ndao", "Faye", "Sarr", "Thiam", "Sow", "Sy", "Ba", "Ka", "Niang", "Bâ", "Lô",
+    "Diagne", "Kane", "Wade", "Samb", "Beye", "Mendy", "Camara", "Sène", "Badji",
+    "Ndoye", "Thiaw", "Mboup", "Diatta", "Ndour", "Sall", "Diakhaté", "Mbodj", "Ndir",
+    "Dione", "Toure", "Gomis", "Goudiaby", "Sané", "Bassène", "Bakhoum", "Coly",
+    "Gning", "Tine", "Diarra", "Sylla", "Konaté", "Sonko", "Niasse", "Dramé",
+    "Diedhiou", "Kébé", "Kaïré", "Fofana", "Kourouma", "Doucouré", "Tandian",
+    "Sagna", "Baïla", "Bousso", "Ngom", "Sarr", "Dabo", "Sakho", "Fadiga", "Boye",
+    "Nguirane", "Diassy", "Koné", "Tounkara", "Bathily", "Coulibaly", "Touré",
+    "Sow", "Bocar", "Barry", "Khouma"
+]
+
+# Fonction pour générer un nom sénégalais
+def generate_senegalese_name():
+    first_name = random.choice(senegalese_first_names)
+    last_name = random.choice(senegalese_last_names)
+    return f"{first_name} {last_name}"
+
 # Create output directory if it doesn't exist
-os.makedirs('data', exist_ok=True)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising')
+os.makedirs(output_dir, exist_ok=True)
 
 # Date range for data generation
 start_date = datetime.datetime(2024, 1, 1)
@@ -387,7 +427,7 @@ def generate_influencer_data(start_date, end_date, num_influencers=30):
         
         influencer = {
             "influencer_id": f"INF-{i+100}",
-            "name": fake.name(),
+            "name": generate_senegalese_name(),  # Utilisation de noms sénégalais
             "tier": tier,
             "followers": followers,
             "primary_platform": primary_platform,
@@ -502,10 +542,10 @@ influencers_df = pd.DataFrame(influencers_data)
 campaigns_df = pd.DataFrame(campaigns_data)
 
 # Save all data
-google_ads_df.to_csv('data/google_ads.csv', index=False)
-social_ads_df.to_csv('data/social_ads.csv', index=False)
-influencers_df.to_csv('data/influencers.csv', index=False)
-campaigns_df.to_csv('data/influencer_campaigns.csv', index=False)
+google_ads_df.to_csv(os.path.join(output_dir, 'google_ads.csv'), index=False)
+social_ads_df.to_csv(os.path.join(output_dir, 'social_ads.csv'), index=False)
+influencers_df.to_csv(os.path.join(output_dir, 'influencers.csv'), index=False)
+campaigns_df.to_csv(os.path.join(output_dir, 'influencer_campaigns.csv'), index=False)
 
 # Combine all platform data for an integrated view
 all_platform_data = []
@@ -582,7 +622,7 @@ for _, campaign in campaigns_df.iterrows():
 
 # Save combined platform data
 all_platforms_df = pd.DataFrame(all_platform_data)
-all_platforms_df.to_csv('data/all_advertising_platforms.csv', index=False)
+all_platforms_df.to_csv(os.path.join(output_dir, 'all_advertising_platforms.csv'), index=False)
 
 print("\nAll advertising data has been generated and saved to CSV files:")
 print(f"  - Google Ads: {len(google_ads_df)} entries")
