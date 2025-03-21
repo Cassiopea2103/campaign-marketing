@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import uuid
 import random
@@ -6,11 +7,132 @@ from faker import Faker
 import os
 
 # Set up Faker with locale support
-fake = Faker(['fr_SN', 'fr_FR'])  # Senegalese French and Standard French
+fake = Faker(['fr_FR'])  
+fake_en = Faker(['en_US']) 
 Faker.seed(42)  # For reproducibility
 
 # Create output directory if it doesn't exist
-os.makedirs('data', exist_ok=True)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw')
+os.makedirs(output_dir, exist_ok=True)
+
+
+# senegalese names : 
+senegalese_first_names = [
+    "Mamadou", "Abdoulaye", "Ousmane", "Modou", "Ibrahima", "Cheikh", "Moussa", "Assane",
+    "Pape", "Idrissa", "Alioune", "Mbaye", "Samba", "Babacar", "Seydou", "Omar", "Aliou",
+    "Gora", "Demba", "Boubacar", "Maguette", "Serigne", "Malick", "Daouda", "Amadou",
+    "Lamine", "Pathé", "Souleymane", "Youssou", "Ismaïla", "Mouhamed", "Tidiane", "Bocar",
+    "Mor", "Abdoul", "Bassirou", "Ababacar", "Landing", "Thierno", "Bara", "Mamour",
+    "Massamba", "El Hadji", "Diaga", "Saliou", "Ilyass", "Karim", "Moustapha", "Ndiaga",
+    "Fadel", "Birame", "Mansour", "Doudou", "Boucounta", "Gorgui", "Habib", "Ablaye",
+    "Sidy", "Bamba", "Saër", "Madické", "Saïdou", "Malal", "Falilou", "Khadim", "Malamine",
+    "Fatou", "Aminata", "Aïssatou", "Rokhaya", "Mariama", "Awa", "Khady", "Dieynaba",
+    "Sokhna", "Ndeye", "Astou", "Fatoumata", "Rama", "Mame", "Adja", "Sophie", "Coumba",
+    "Nabou", "Soda", "Bineta", "Yacine", "Bintou", "Fama", "Ramatoulaye", "Safiétou",
+    "Dior", "Yaye", "Tening", "Mbayang", "Penda", "Maty", "Kiné", "Seynabou", "Fari",
+    "Adjara", "Salimata", "Marième", "Anta", "Saly", "Oumy", "Marème", "Tida", "Diarra",
+    "Ndèye", "Diouma", "Magatte", "Ndella", "Kadija", "Maïmouna", "Tata", "Ndioro",
+    "Yandé", "Diama", "Codou", "Bérénice", "Aissatou", "Amy", "Ngoné", "Mbathio"
+]
+
+senegalese_last_names = [
+    "Diop", "Ndiaye", "Fall", "Gueye", "Seck", "Mbaye", "Diouf", "Diallo", "Cissé",
+    "Ndao", "Faye", "Sarr", "Thiam", "Sow", "Sy", "Ba", "Ka", "Niang", "Bâ", "Lô",
+    "Diagne", "Kane", "Wade", "Samb", "Beye", "Mendy", "Camara", "Sène", "Badji",
+    "Ndoye", "Thiaw", "Mboup", "Diatta", "Ndour", "Sall", "Diakhaté", "Mbodj", "Ndir",
+    "Dione", "Toure", "Gomis", "Goudiaby", "Sané", "Bassène", "Bakhoum", "Coly",
+    "Gning", "Tine", "Diarra", "Sylla", "Konaté", "Sonko", "Niasse", "Dramé",
+    "Diedhiou", "Kébé", "Kaïré", "Fofana", "Kourouma", "Doucouré", "Tandian",
+    "Sagna", "Baïla", "Bousso", "Ngom", "Sarr", "Dabo", "Sakho", "Fadiga", "Boye",
+    "Nguirane", "Diassy", "Koné", "Tounkara", "Bathily", "Coulibaly", "Touré",
+    "Sow", "Bocar", "Barry", "Khouma"
+]
+
+senegal_admin_structure = {
+    "Dakar": {
+        "region": "Dakar",
+        "cities": ["Dakar", "Pikine", "Guédiawaye", "Rufisque", "Bargny", "Diamniadio"]
+    },
+    "Thiès": {
+        "region": "Thiès",
+        "cities": ["Thiès", "Mbour", "Tivaouane", "Joal-Fadiouth", "Kayar", "Pout"]
+    },
+    "Saint-Louis": {
+        "region": "Saint-Louis",
+        "cities": ["Saint-Louis", "Richard-Toll", "Dagana", "Podor"]
+    },
+    "Diourbel": {
+        "region": "Diourbel",
+        "cities": ["Diourbel", "Touba", "Mbacké", "Bambey"]
+    },
+    "Fatick": {
+        "region": "Fatick",
+        "cities": ["Fatick", "Kaolack", "Gossas", "Foundiougne"]
+    },
+    "Kaolack": {
+        "region": "Kaolack",
+        "cities": ["Kaolack", "Nioro du Rip", "Guinguinéo"]
+    },
+    "Kaffrine": {
+        "region": "Kaffrine",
+        "cities": ["Kaffrine", "Koungheul", "Malem Hodar"]
+    },
+    "Kédougou": {
+        "region": "Kédougou",
+        "cities": ["Kédougou", "Salémata", "Saraya"]
+    },
+    "Kolda": {
+        "region": "Kolda",
+        "cities": ["Kolda", "Vélingara", "Médina Yoro Foulah"]
+    },
+    "Louga": {
+        "region": "Louga",
+        "cities": ["Louga", "Linguère", "Kébémer"]
+    },
+    "Matam": {
+        "region": "Matam",
+        "cities": ["Matam", "Kanel", "Ranérou"]
+    },
+    "Sédhiou": {
+        "region": "Sédhiou",
+        "cities": ["Sédhiou", "Goudomp", "Bounkiling"]
+    },
+    "Tambacounda": {
+        "region": "Tambacounda",
+        "cities": ["Tambacounda", "Bakel", "Goudiry", "Koumpentoum"]
+    },
+    "Ziguinchor": {
+        "region": "Ziguinchor",
+        "cities": ["Ziguinchor", "Bignona", "Oussouye"]
+    }
+}
+all_regions = list(senegal_admin_structure.keys())
+all_cities = []
+city_to_region_map = {}
+
+for region, data in senegal_admin_structure.items():
+    for city in data["cities"]:
+        all_cities.append(city)
+        city_to_region_map[city] = region
+
+cities = {}
+for region, region_cities in senegal_admin_structure.items():
+    # Donner plus de poids à Dakar
+    weight_multiplier = 3 if region == "Dakar" else 1
+    for city in region_cities:
+        cities[city] = 0.1 * weight_multiplier / len(region_cities)
+
+# Créer un mapping ville vers région
+city_to_region = {}
+for region, region_cities in senegal_admin_structure.items():
+    for city in region_cities:
+        city_to_region[city] = region
+
+
+
+def generate_senegalese_name():
+    return random.choice(senegalese_first_names), random.choice(senegalese_last_names)
 
 # Define Senegalese cities with population-based weights
 cities = {
@@ -21,7 +143,7 @@ cities = {
 
 # Senegalese phone number formats
 def generate_senegal_phone():
-    # Senegal mobile prefixes
+    # Préfixes mobiles sénégalais
     prefixes = ["77", "78", "76", "70", "75"]
     return f"+221 {random.choice(prefixes)} {random.randint(100, 999)} {random.randint(10, 99)} {random.randint(10, 99)}"
 
@@ -57,9 +179,9 @@ def generate_customers(num_customers=1000):
         customer_id = str(uuid.uuid4())
         
         # Basic information
-        first_name = fake.first_name()
-        last_name = fake.last_name()
-        email = f"{first_name.lower()}.{last_name.lower()}{random.randint(1, 99)}@{random.choice(['gmail.com', 'yahoo.fr', 'hotmail.com', 'outlook.com', 'orange.sn'])}"
+        first_name, last_name = generate_senegalese_name()
+        email_domain = random.choice(['gmail.com', 'yahoo.fr', 'hotmail.com', 'outlook.com'])
+        email = f"{first_name.lower()}.{last_name.lower()}{random.randint(1, 99)}@{email_domain}"
         phone = generate_senegal_phone()
         
         # Location (weighted by population)
@@ -128,6 +250,7 @@ def generate_customers(num_customers=1000):
             "email": email,
             "phone": phone,
             "city": city,
+            "region": region,
             "address": fake.street_address() if has_purchased else None,
             "registration_date": registration_date.strftime("%Y-%m-%d %H:%M:%S"),
             "first_purchase_date": first_purchase_date.strftime("%Y-%m-%d %H:%M:%S") if first_purchase_date else None,
@@ -153,9 +276,15 @@ def generate_customers(num_customers=1000):
 # Generate order data
 def generate_orders(customers_df, num_orders=5000):
     orders = []
-    
+    date_columns = ['registration_date', 'first_purchase_date', 'last_purchase_date']
+    for col in date_columns:
+        if col in customers_df.columns:
+            customers_df[col] = pd.to_datetime(customers_df[col], errors='coerce')
+
     # Get customers who have made purchases
     customers_with_orders = customers_df[customers_df['total_orders'] > 0].copy()
+
+
     
     # Product categories and items
     categories = ["soin_visage", "soin_corps", "soin_cheveux", "maquillage", "parfum"]
@@ -233,13 +362,33 @@ def generate_orders(customers_df, num_orders=5000):
         customer = customers_with_orders.sample(weights=customers_with_orders['total_orders']).iloc[0]
         
         # Order date
-        if pd.notna(customer['first_purchase_date']) and pd.notna(customer['last_purchase_date']):
-            order_date = fake.date_time_between(
-                start_date=customer['first_purchase_date'], 
-                end_date=customer['last_purchase_date']
-            )
-        else:
-            # Fallback if dates are missing
+        try:
+            if pd.notna(customer['first_purchase_date']) and pd.notna(customer['last_purchase_date']):
+                # Convertir en objets datetime si ce ne sont pas déjà des datetime
+                if isinstance(customer['first_purchase_date'], (str, tuple)):
+                    start_date = pd.to_datetime(customer['first_purchase_date'])
+                else:
+                    start_date = customer['first_purchase_date']
+                
+                if isinstance(customer['last_purchase_date'], (str, tuple)):
+                    end_date = pd.to_datetime(customer['last_purchase_date'])
+                else:
+                    end_date = customer['last_purchase_date']
+                
+                # Générer date aléatoire entre les deux dates
+                days_range = (end_date - start_date).days
+                if days_range > 0:
+                    random_days = random.randint(0, days_range)
+                    order_date = start_date + datetime.timedelta(days=random_days)
+                else:
+                    order_date = start_date  # Même jour
+            else:
+                # Fallback si dates manquantes
+                order_date = fake.date_time_between(start_date='-2y', end_date='now')
+        except Exception as e:
+            print(f"Erreur lors du traitement des dates: {e}")
+            print(f"Valeurs: first_purchase_date={customer['first_purchase_date']}, last_purchase_date={customer['last_purchase_date']}")
+            # Utiliser une date par défaut
             order_date = fake.date_time_between(start_date='-2y', end_date='now')
         
         # Determine season based on date
@@ -381,8 +530,8 @@ customers_data = generate_customers(num_customers)
 customers_df = pd.DataFrame(customers_data)
 
 # Save customer data
-customers_df.to_csv('data/customers.csv', index=False)
-print(f"Saved {len(customers_df)} customer records to 'data/customers.csv'")
+customers_df.to_csv('data/raw/customers.csv', index=False)
+print(f"Saved {len(customers_df)} customer records to 'data/raw/customers.csv'")
 
 # Generate order data
 print("Generating order data...")
@@ -393,8 +542,8 @@ for order in orders_data:
     order['items'] = str(order['items'])
 
 orders_df = pd.DataFrame(orders_data)
-orders_df.to_csv('data/orders.csv', index=False)
-print(f"Saved {len(orders_df)} order records to 'data/orders.csv'")
+orders_df.to_csv('data/raw/orders.csv', index=False)
+print(f"Saved {len(orders_df)} order records to 'data/raw/orders.csv'")
 
 # Preview the data
 print("\nCustomer Data Preview:")
