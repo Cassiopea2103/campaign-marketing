@@ -16,6 +16,41 @@ fake_sn = Faker(['en_US'])  # For non-locale specific items
 base_dir = os.path.dirname(os.path.abspath(__file__))
 output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw')
 os.makedirs(output_dir, exist_ok=True)
+json_file_path = os.path.join(output_dir, 'web_logs.json')
+csv_file_path = os.path.join(output_dir, 'web_logs.csv')
+
+
+senegalese_first_names = [
+    "Mamadou", "Abdoulaye", "Ousmane", "Modou", "Ibrahima", "Cheikh", "Moussa", "Assane",
+    "Pape", "Idrissa", "Alioune", "Mbaye", "Samba", "Babacar", "Seydou", "Omar", "Aliou",
+    "Gora", "Demba", "Boubacar", "Maguette", "Serigne", "Malick", "Daouda", "Amadou",
+    "Lamine", "Pathé", "Souleymane", "Youssou", "Ismaïla", "Mouhamed", "Tidiane", "Bocar",
+    "Mor", "Abdoul", "Bassirou", "Ababacar", "Landing", "Thierno", "Bara", "Mamour",
+    "Massamba", "El Hadji", "Diaga", "Saliou", "Ilyass", "Karim", "Moustapha", "Ndiaga",
+    "Fadel", "Birame", "Mansour", "Doudou", "Boucounta", "Gorgui", "Habib", "Ablaye",
+    "Sidy", "Bamba", "Saër", "Madické", "Saïdou", "Malal", "Falilou", "Khadim", "Malamine",
+    "Fatou", "Aminata", "Aïssatou", "Rokhaya", "Mariama", "Awa", "Khady", "Dieynaba",
+    "Sokhna", "Ndeye", "Astou", "Fatoumata", "Rama", "Mame", "Adja", "Sophie", "Coumba",
+    "Nabou", "Soda", "Bineta", "Yacine", "Bintou", "Fama", "Ramatoulaye", "Safiétou",
+    "Dior", "Yaye", "Tening", "Mbayang", "Penda", "Maty", "Kiné", "Seynabou", "Fari",
+    "Adjara", "Salimata", "Marième", "Anta", "Saly", "Oumy", "Marème", "Tida", "Diarra",
+    "Ndèye", "Diouma", "Magatte", "Ndella", "Kadija", "Maïmouna", "Tata", "Ndioro",
+    "Yandé", "Diama", "Codou", "Bérénice", "Aissatou", "Amy", "Ngoné", "Mbathio"
+]
+
+senegalese_last_names = [
+    "Diop", "Ndiaye", "Fall", "Gueye", "Seck", "Mbaye", "Diouf", "Diallo", "Cissé",
+    "Ndao", "Faye", "Sarr", "Thiam", "Sow", "Sy", "Ba", "Ka", "Niang", "Bâ", "Lô",
+    "Diagne", "Kane", "Wade", "Samb", "Beye", "Mendy", "Camara", "Sène", "Badji",
+    "Ndoye", "Thiaw", "Mboup", "Diatta", "Ndour", "Sall", "Diakhaté", "Mbodj", "Ndir",
+    "Dione", "Toure", "Gomis", "Goudiaby", "Sané", "Bassène", "Bakhoum", "Coly",
+    "Gning", "Tine", "Diarra", "Sylla", "Konaté", "Sonko", "Niasse", "Dramé",
+    "Diedhiou", "Kébé", "Kaïré", "Fofana", "Kourouma", "Doucouré", "Tandian",
+    "Sagna", "Baïla", "Bousso", "Ngom", "Sarr", "Dabo", "Sakho", "Fadiga", "Boye",
+    "Nguirane", "Diassy", "Koné", "Tounkara", "Bathily", "Coulibaly", "Touré",
+    "Sow", "Bocar", "Barry", "Khouma"
+]
+
 
 class WebEventGenerator:
     def __init__(self, crm_ids=None, campaign_ids=None):
@@ -141,6 +176,7 @@ class WebEventGenerator:
             "Autres régions": {"cost": 5000, "free_threshold": 30000}
         }
 
+
     def generate_sn_ip(self):
         """Generate a realistic IP address (simulating Senegalese IPs)"""
         prefixes = ["41.82.", "41.83.", "154.124.", "196.1."]
@@ -150,11 +186,31 @@ class WebEventGenerator:
         """Generate a new user session ID"""
         return str(uuid.uuid4())
     
-    def generate_senegal_email(self):
-        """Generate an email with a local name and domain"""
-        name = fake.user_name().lower().replace(' ', '.')
+    
+    def generate_senegal_email(self, first_name=None, last_name=None):
+        """Generate an email with a Senegalese name and domain"""
+        # Si les noms ne sont pas fournis, en générer de nouveaux
+        if not first_name:
+            first_name = random.choice(senegalese_first_names).lower()
+        else:
+            first_name = first_name.lower()
+        
+        if not last_name:
+            last_name = random.choice(senegalese_last_names).lower()
+        else:
+            last_name = last_name.lower()
+        
         domain = random.choice(self.senegal_email_domains)
-        return f"{name}@{domain}"
+    
+        # Différents formats d'email
+        formats = [
+            f"{first_name}.{last_name}@{domain}",
+            f"{first_name}{random.randint(1, 99)}@{domain}",
+            f"{first_name[0]}{last_name}@{domain}",
+            f"{last_name}.{first_name}@{domain}"
+        ]
+    
+        return random.choice(formats)
     
     def generate_senegal_phone(self):
         """Generate a Senegalese phone number"""
@@ -167,16 +223,25 @@ class WebEventGenerator:
         is_authenticated = authenticated if authenticated is not None else random.random() < 0.3
         
         if is_authenticated:
-            # If we have CRM IDs available, use one for alignment
-            if self.crm_ids and random.random() < 0.8:  # 80% chance to use an existing CRM ID
+            # Obtenir un ID utilisateur
+            if self.crm_ids and random.random() < 0.8:
                 crm_id = random.choice(self.crm_ids)
-                user_id = f"U{crm_id}"  # Prefix U to indicate it's a web user ID
+                user_id = f"U{crm_id}"
             else:
                 user_id = f"U{random.randint(10000, 99999)}"
-                
+            
+            # Générer un prénom et un nom sénégalais
+            first_name = random.choice(senegalese_first_names)
+            last_name = random.choice(senegalese_last_names)
+            
+            # Générer un email basé sur ces noms
+            email = self.generate_senegal_email(first_name, last_name)
+            
             user = {
                 "user_id": user_id,
-                "email": self.generate_senegal_email(),
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
                 "authenticated": True,
                 "registration_date": fake.date_time_this_year().isoformat(),
                 "user_segment": random.choice(["new", "regular", "vip", "diaspora"]),
@@ -441,13 +506,21 @@ num_sessions = 5000  # Adjust as needed
 logs_data = generate_web_logs(num_sessions)
 
 # Save as JSON (for streaming simulation)
-with open(os.path.join(output_dir, 'web_logs.json'), 'w') as f:
-    for log in logs_data:
-        f.write(json.dumps(log) + '\n')
+try:
+    with open(json_file_path, 'w', encoding='utf-8') as f:
+        for log in logs_data:
+            f.write(json.dumps(log, ensure_ascii=False) + '\n')
+    print(f"Données JSON sauvegardées dans {json_file_path}")
+except Exception as e:
+    print(f"Erreur lors de l'écriture du fichier JSON: {e}")
 
 # Also save as CSV for easier analysis
-df = pd.DataFrame(logs_data)
-df.to_csv('data/raw/web_logs.csv', index=False)
+try:
+    df = pd.DataFrame(logs_data)
+    df.to_csv(csv_file_path, index=False)
+    print(f"Données CSV sauvegardées dans {csv_file_path}")
+except Exception as e:
+    print(f"Erreur lors de l'écriture du fichier CSV: {e}")
 
 print(f"Generated {len(logs_data)} web log events from {num_sessions} sessions")
 print(f"Files saved to 'data/web_logs.json' and 'data/web_logs.csv'")
