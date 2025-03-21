@@ -371,7 +371,18 @@ class WebEventGenerator:
             # Next URL is the product page
             next_url = f"/produits/{product['id']}"
             
-        elif event_type in ["add_to_cart
+        elif event_type in ["add_to_cart", "remove_from_cart"]:
+            # Select a product
+            product = random.choice(self.products)
+            quantity = random.randint(1, 3)
+                
+            event_base["product"] = {
+                "product_id": product["id"],
+                "name": product["nom"],
+                "price": product["prix"],
+                "category": product["categorie"],
+                "quantity": quantity
+            }
 
 # Generate logs
 num_sessions = 5000  # Adjust as needed
