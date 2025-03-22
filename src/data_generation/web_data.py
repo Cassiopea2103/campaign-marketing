@@ -341,7 +341,7 @@ class WebEventGenerator:
             # Obtenir un ID utilisateur
             if self.crm_ids and random.random() < 0.8:
                 crm_id = random.choice(self.crm_ids)
-                user_id = f"U{crm_id}"
+                user_id = crm_id
             else:
                 user_id = f"U{random.randint(10000, 99999)}"
             
