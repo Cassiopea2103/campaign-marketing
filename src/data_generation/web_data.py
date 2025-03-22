@@ -125,6 +125,7 @@ class WebEventGenerator:
         """Charge les IDs CRM et les IDs de campagne existants depuis les fichiers générés"""
         crm_ids = []
         campaign_ids = []
+        crm_data = {}
         
         # Tenter de charger les IDs CRM depuis le fichier customers.csv
         try:
@@ -133,6 +134,18 @@ class WebEventGenerator:
                 customers_df = pd.read_csv(customers_path)
                 if 'customer_id' in customers_df.columns:
                     crm_ids = customers_df['customer_id'].tolist()
+                    # load customer data for alignment : 
+                    for _, row in customers_df.iterrows():
+                        crm_data[row['customer_id']] = {
+                            'first_name': row['first_name'],
+                            'last_name': row['last_name'],
+                            'email': row['email'],
+                            'phone': row['phone'],
+                            'city': row.get('city', ''),
+                            'region': row.get('region', ''),
+                            'registration_date': row.get('registration_date', ''),
+                            # Ajouter d'autres champs pertinents au besoin
+                        }
                 print(f"Chargé {len(crm_ids)} IDs clients depuis {customers_path}")
         except Exception as e:
             print(f"Erreur lors du chargement des IDs CRM: {e}")
@@ -165,15 +178,16 @@ class WebEventGenerator:
         except Exception as e:
             print(f"Erreur lors du chargement des IDs de campagne: {e}")
         
-        return crm_ids, campaign_ids
+        return crm_ids, campaign_ids, crm_data
 
 
-    def __init__(self, crm_ids=None, campaign_ids=None):
+    def __init__(self, crm_ids=None, campaign_ids=None, crm_data=None):
         """Initialize the web event generator with optional CRM and campaign IDs for data alignment"""
         # Allow injection of IDs from other sources for alignment
         self.crm_ids = crm_ids or []  # Customer IDs from CRM
         self.campaign_ids = campaign_ids or []  # Campaign IDs from advertising data
-        
+        self.crm_data = crm_data or {}  # Complete CRM data
+
         # Define product categories and products - including popular cosmetics in Senegal
         self.categories = ["soin_visage", "soin_corps", "soin_cheveux", "maquillage", "parfum", "homme", "bio", "traditionnel"]
         self.products = [
@@ -335,13 +349,28 @@ class WebEventGenerator:
         
     def generate_user(self, authenticated=None):
         """Generate a user (anonymous or authenticated)"""
-        is_authenticated = authenticated if authenticated is not None else random.random() < 0.3
+        is_authenticated = authenticated if authenticated is not None else random.random() < 0.5 
         
         if is_authenticated:
             # Obtenir un ID utilisateur
             if self.crm_ids and random.random() < 0.8:
                 crm_id = random.choice(self.crm_ids)
                 user_id = crm_id
+
+            # Utiliser les données existantes du CRM si disponibles
+                if user_id in self.crm_data:
+                    crm_user = self.crm_data[user_id]
+                    user = {
+                        "user_id": user_id,
+                        "first_name": crm_user['first_name'],
+                        "last_name": crm_user['last_name'],
+                        "email": crm_user['email'],
+                        "authenticated": True,
+                        "registration_date": crm_user.get('registration_date', fake.date_time_this_year().isoformat()),
+                        "user_segment": random.choice(["new", "regular", "vip", "diaspora"]),
+                        "phone": crm_user['phone']
+                    }
+                    return user
             else:
                 user_id = f"U{random.randint(10000, 99999)}"
             
@@ -571,11 +600,11 @@ def generate_web_logs(num_sessions):
     logs_data = []
 
     # load CRM and advertising IDs :
-    crm_ids, campaign_ids = WebEventGenerator.load_existing_ids()
+    crm_ids, campaign_ids, crm_data = WebEventGenerator.load_existing_ids()
 
         
     # Create generator instance
-    generator = WebEventGenerator(crm_ids=crm_ids, campaign_ids=campaign_ids)
+    generator = WebEventGenerator(crm_ids=crm_ids, campaign_ids=campaign_ids, crm_data=crm_data)
         
     for _ in range(num_sessions):
         # Create a new session
