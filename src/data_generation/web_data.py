@@ -569,9 +569,13 @@ class WebEventGenerator:
 def generate_web_logs(num_sessions):
     """Generate web logs for the specified number of sessions"""
     logs_data = []
+
+    # load CRM and advertising IDs :
+    crm_ids, campaign_ids = WebEventGenerator.load_existing_ids()
+
         
     # Create generator instance
-    generator = WebEventGenerator()
+    generator = WebEventGenerator(crm_ids=crm_ids, campaign_ids=campaign_ids)
         
     for _ in range(num_sessions):
         # Create a new session
