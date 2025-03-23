@@ -1,0 +1,79 @@
+digraph "Architecture E-commerce Cosmétiques Bio" {
+	graph [fontcolor="#2D3436" fontname="Sans-Serif" fontsize=15 label="Architecture E-commerce Cosmétiques Bio" nodesep=0.60 pad=2.0 rankdir=LR ranksep=0.75 splines=ortho]
+	node [fixedsize=true fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13 height=1.4 imagescale=true labelloc=b shape=box style=rounded width=1.4]
+	edge [color="#7B8894"]
+	subgraph "cluster_Data source" {
+		graph [bgcolor="#E5F5FD" fontname="Sans-Serif" fontsize=12 label="Data source" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+		subgraph cluster_CRM {
+			graph [bgcolor="#EBF3E7" fontname="Sans-Serif" fontsize=12 label=CRM labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+			d3303ff476b84eed9b3df4f6d386ba99 [label=customers height=1.9 image="./icons/csv.png" shape=none]
+			"0f6d46c873824d21b02cd1a20204e008" [label=orders height=1.9 image="./icons/csv.png" shape=none]
+		}
+		subgraph cluster_Advertising {
+			graph [bgcolor="#EBF3E7" fontname="Sans-Serif" fontsize=12 label=Advertising labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+			"6dadf5340b6f45ee949b70544506ab22" [label="Google ads" height=1.9 image="./icons/csv.png" shape=none]
+			c14c82bba52f4ba6a8674eb4b0a928c4 [label="Social ads" height=1.9 image="./icons/csv.png" shape=none]
+			"4e8b7a357acb4dbd9d0bf7c9c13dae32" [label="Influencers data" height=1.9 image="./icons/csv.png" shape=none]
+		}
+		subgraph "cluster_Web logs" {
+			graph [bgcolor="#EBF3E7" fontname="Sans-Serif" fontsize=12 label="Web logs" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+			fe9a1cd5e8ce43beaf887e9dfe1a86ea [label="Web logs" height=1.9 image="./icons/csv.png" shape=none]
+			"150bf1322fd54e11ad6860c1bec809f5" [label="Web logs" height=1.9 image="./icons/json.png" shape=none]
+		}
+	}
+	"9d8e70f5c3f345718a87492f3f78e52d" [label=Airflow height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/workflow\airflow.png" shape=none]
+	d3303ff476b84eed9b3df4f6d386ba99 -> "5ab0031877c742cda0bf7fb599578227" [label="CRM TOPIC" dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"0f6d46c873824d21b02cd1a20204e008" -> "5ab0031877c742cda0bf7fb599578227" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"6dadf5340b6f45ee949b70544506ab22" -> "5ab0031877c742cda0bf7fb599578227" [label="ADV TOPIC" dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	c14c82bba52f4ba6a8674eb4b0a928c4 -> "5ab0031877c742cda0bf7fb599578227" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"4e8b7a357acb4dbd9d0bf7c9c13dae32" -> "5ab0031877c742cda0bf7fb599578227" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	fe9a1cd5e8ce43beaf887e9dfe1a86ea -> "5ab0031877c742cda0bf7fb599578227" [label="LOGS TOPIC" dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"150bf1322fd54e11ad6860c1bec809f5" -> "5ab0031877c742cda0bf7fb599578227" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"5ab0031877c742cda0bf7fb599578227" -> be26fb27816e454aaa2b2c880fe9a636 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"5ab0031877c742cda0bf7fb599578227" -> a707d25d86ba4110bacd9af9c7181a18 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	subgraph cluster_Processing {
+		graph [bgcolor="#E5F5FD" fontname="Sans-Serif" fontsize=12 label=Processing labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+		subgraph "cluster_Data ingestion" {
+			graph [bgcolor="#EBF3E7" fontname="Sans-Serif" fontsize=12 label="Data ingestion" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+			"5ab0031877c742cda0bf7fb599578227" [label=Kafka height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/queue\kafka.png" shape=none]
+		}
+		be26fb27816e454aaa2b2c880fe9a636 [label="Spark
+Batch" height=2.3 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/analytics\spark.png" shape=none]
+		a707d25d86ba4110bacd9af9c7181a18 [label="Spark
+Streaming" height=2.3 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/analytics\spark.png" shape=none]
+	}
+	acee761940c6409f9a3da4b52b02d3c8 -> df5f408362d948e0ae9f3771301564c3 [label="Continual improvements" dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	df5f408362d948e0ae9f3771301564c3 -> "449ade4d894a4e9bbc5663229315d79c" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	df5f408362d948e0ae9f3771301564c3 -> "1d46618ac0a34321b75db7605b417a92" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"1d46618ac0a34321b75db7605b417a92" -> ffa478c1b06c4b2081b5ca64ff374890 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	subgraph "cluster_Data storage" {
+		graph [bgcolor="#E5F5FD" fontname="Sans-Serif" fontsize=12 label="Data storage" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+		subgraph cluster_ {
+			graph [bgcolor="#EBF3E7" fontname="Sans-Serif" fontsize=12 label="" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+			acee761940c6409f9a3da4b52b02d3c8 [label=raw height=1.9 image="./icons/database.png" shape=none]
+			df5f408362d948e0ae9f3771301564c3 [label=staging height=1.9 image="./icons/database.png" shape=none]
+			"449ade4d894a4e9bbc5663229315d79c" [label="curated business data" height=1.9 image="./icons/database.png" shape=none]
+		}
+		"1d46618ac0a34321b75db7605b417a92" [label=dbt height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/analytics\dbt.png" shape=none]
+		ffa478c1b06c4b2081b5ca64ff374890 [label=Snowflake height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/saas/analytics\snowflake.png" shape=none]
+	}
+	"5a0f77f3a80f4f4d815f99d657bbeb1f" [label=Docker height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/container\docker.png" shape=none]
+	"2680477be88b401da9af9ed4f693a95c" -> "4881e2b39743470383160db5a02f989d" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	subgraph "cluster_Monitoring & Alerting" {
+		graph [bgcolor="#E5F5FD" fontname="Sans-Serif" fontsize=12 label="Monitoring & Alerting" labeljust=l pencolor="#AEB6BE" rankdir=LR shape=box style=rounded]
+		"2680477be88b401da9af9ed4f693a95c" [label=Prometheus height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/monitoring\prometheus.png" shape=none]
+		"4881e2b39743470383160db5a02f989d" [label=Grafana height=1.9 image="C:\Users\SerigneSaliouWADE\AppData\Local\Programs\Python\Python312\Lib\site-packages\resources/onprem/monitoring\grafana.png" shape=none]
+	}
+	e11073e7e71a43778a988cb4e69bed02 [label=Looker height=1.9 image="./icons/looker.png" shape=none]
+	ffa478c1b06c4b2081b5ca64ff374890 -> e11073e7e71a43778a988cb4e69bed02 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	be26fb27816e454aaa2b2c880fe9a636 -> acee761940c6409f9a3da4b52b02d3c8 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	a707d25d86ba4110bacd9af9c7181a18 -> acee761940c6409f9a3da4b52b02d3c8 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"5ab0031877c742cda0bf7fb599578227" -> "2680477be88b401da9af9ed4f693a95c" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	be26fb27816e454aaa2b2c880fe9a636 -> "2680477be88b401da9af9ed4f693a95c" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	a707d25d86ba4110bacd9af9c7181a18 -> "2680477be88b401da9af9ed4f693a95c" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"9d8e70f5c3f345718a87492f3f78e52d" -> "2680477be88b401da9af9ed4f693a95c" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"9d8e70f5c3f345718a87492f3f78e52d" -> "5ab0031877c742cda0bf7fb599578227" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"9d8e70f5c3f345718a87492f3f78e52d" -> be26fb27816e454aaa2b2c880fe9a636 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"9d8e70f5c3f345718a87492f3f78e52d" -> a707d25d86ba4110bacd9af9c7181a18 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	"9d8e70f5c3f345718a87492f3f78e52d" -> "1d46618ac0a34321b75db7605b417a92" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+}
