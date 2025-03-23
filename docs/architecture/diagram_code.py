@@ -8,10 +8,12 @@ from diagrams.onprem.analytics import Dbt
 from diagrams.custom import Custom
 from diagrams.onprem.monitoring import Grafana, Prometheus
 from diagrams.saas.analytics import Snowflake
+import os
 # Pas d'import de Looker car il n'est pas disponible
 
 # Définition des icônes personnalisées
-ICONS_DIR = "./icons/"
+ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "./icons/")
+
 
 # Pour créer le diagramme
 with Diagram("Architecture E-commerce Cosmétiques Bio", show=False, direction="LR", filename="ecommerce_architecture"):
