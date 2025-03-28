@@ -1017,95 +1017,98 @@ class WebEventGenerator:
             pass
                 
     def generate_historical_data(self, start_date, end_date, daily_event_count=5000):
-        """Generate historical data for a date range"""
+        """Generate historical data for a date range with live-like streaming display"""
         print(f"Generating historical web logs from {start_date} to {end_date}")
-        
+            
         # Set up date range
         self.start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
         self.current_date = self.start_date
         self.real_time = False
-        
+            
         # Process each day
         current_date = self.start_date
         total_events = 0
-        
+            
         while current_date <= self.end_date:
             # Update generator's current date
             self.current_date = current_date
             date_str = current_date.strftime('%Y%m%d')
-            
-            print(f"Generating data for {current_date.strftime('%Y-%m-%d')}...")
-            
-            # Calculate event count for this day with some variation
-            # Weekends have less traffic
+                
+            print(f"\nSimulating traffic for {current_date.strftime('%Y-%m-%d')}...")
+                
+            # Calculate event count for this day with variation factors
             weekday = current_date.weekday()
             weekend_factor = 0.7 if weekday >= 5 else 1.0
-            
-            # Special days have more traffic
+                
             month = current_date.month
             day = current_date.day
-            
+                
             # Boost factors for special periods
             special_factor = 1.0
-            
-            # Ramadan effect (approximate)
-            if month == 4:
+            if month == 4:  # Ramadan
                 special_factor = 1.3
-            
-            # Tabaski effect (approximate)
-            elif month == 9 and day > 15:
+            elif month == 9 and day > 15:  # Tabaski
                 special_factor = 1.4
-            
-            # End of year shopping
-            elif month == 12:
-                if day < 15:
-                    special_factor = 1.2
-                else:
-                    special_factor = 1.5  # Higher closer to holidays
-            
-            # Sales periods
-            elif month == 2 or month == 7:
+            elif month == 12:  # End of year
+                special_factor = 1.2 if day < 15 else 1.5
+            elif month == 2 or month == 7:  # Sales periods
                 special_factor = 1.2
-            
-            # Calculate final event count with randomness
+                
             day_event_count = int(daily_event_count * weekend_factor * special_factor * random.uniform(0.9, 1.1))
-            
-            # Generate events for the day
+                
+            # Generate events in smaller batches to simulate streaming
             day_events = []
-            
-            # Generate in sessions for more realism
             sessions_to_generate = day_event_count // 5  # Average 5 events per session
-            
-            for _ in tqdm(range(sessions_to_generate), desc=f"Generating {day_event_count} events", unit="session"):
-                # Random events per session (1-10)
-                session_event_count = min(10, max(1, int(np.random.poisson(5))))
                 
-                # Generate all events for this session
-                session_events = self.generate_session_events(session_event_count)
-                day_events.extend(session_events)
+            # Instead of one big progress bar, break it into smaller chunks
+            chunk_size = min(50, max(5, sessions_to_generate // 20))  # Aim for 20 chunks
                 
-                # Short delay to prevent resource exhaustion
-                if _ % 100 == 0:
-                    time.sleep(0.001)
-            
-            # Write all events for the day
-            self.write_events(day_events, 'file')
-            
+            for chunk_start in range(0, sessions_to_generate, chunk_size):
+                chunk_end = min(chunk_start + chunk_size, sessions_to_generate)
+                chunk_size_actual = chunk_end - chunk_start
+                    
+                # Create a smaller batch of events
+                batch_events = []
+                    
+                # Show a smaller progress bar for this batch
+                print(f"Generating batch of ~{chunk_size_actual * 5} events...")
+                    
+                for i in tqdm(range(chunk_size_actual), desc=f"Batch {chunk_start//chunk_size + 1}/{(sessions_to_generate + chunk_size - 1)//chunk_size}", unit="session"):
+                    # Random events per session (1-10)
+                    session_event_count = min(10, max(1, int(np.random.poisson(5))))
+                        
+                    # Generate events for this session
+                    session_events = self.generate_session_events(session_event_count)
+                    batch_events.extend(session_events)
+                        
+                    # Small delay to make it look more realistic
+                    if i % 5 == 0:
+                        time.sleep(5)
+                    
+                # Write this batch and provide feedback
+                self.write_events(batch_events, 'file')
+                day_events.extend(batch_events)
+                    
+                # Show summary after each batch
+                events_so_far = len(day_events)
+                progress_pct = events_so_far / day_event_count * 100
+                print(f"Progress: {events_so_far}/{day_event_count} events ({progress_pct:.1f}%) for {current_date.strftime('%Y-%m-%d')}")
+                    
+                # Pause between batches for more realistic progression
+                time.sleep(0.5)
+                
             total_events += len(day_events)
-            print(f"Generated {len(day_events)} events for {current_date.strftime('%Y-%m-%d')}")
-
-            
-            
-            # Move to next day
+            print(f"Completed {len(day_events)} events for {current_date.strftime('%Y-%m-%d')}")
+                
+            # Move to next day with a visible pause
+            time.sleep(1.0)
             current_date += datetime.timedelta(days=1)
-            
+                
             # Clean up sessions between days
             self.active_sessions = {}
-        
+            
         print(f"Historical data generation complete: {total_events} events")
-
-
 # Main execution
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate web log data with time progression')
