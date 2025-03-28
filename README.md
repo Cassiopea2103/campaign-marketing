@@ -56,9 +56,75 @@ project-root/
    cd cosmetics-data-engineering
    ```
 
-2. Générer les données fictives :
+2. Installer les dépendances :
    ```bash
-   python -m src.data_generation.web_data
-   python -m src.data_generation.crm_data
-   python -m src.data_generation.advertising
+   pip install -r requirements.txt
    ```
+
+## 📊 Génération des données fictives
+
+Le projet inclut des scripts pour générer des données fictives réalistes simulant le fonctionnement d'une entreprise de cosmétiques bio.
+
+### Génération des logs web
+
+```bash
+# Mode batch - Génère des données historiques
+python src/data_generation/web_data.py --mode batch --start-date 2025-01-01 --end-date 2025-03-28 --events-per-day 5000
+
+# Mode streaming - Génère des données en continu simulant un trafic en temps réel
+python src/data_generation/web_data.py --mode stream --events-per-minute 30 --duration 3600
+```
+
+### Génération des données CRM
+
+```bash
+python src/data_generation/crm_data.py --start-date 2025-01-01 --end-date 2025-03-28 --frequency daily --initial-customers 500
+```
+
+### Génération des données publicitaires
+
+```bash
+python src/data_generation/advertising.py --start-date 2025-01-01 --end-date 2025-03-28 --frequency daily
+```
+
+### Génération complète des données
+
+Pour générer l'ensemble des données pour le projet, exécutez les scripts dans cet ordre :
+
+```bash
+# 1. Données CRM (clients et commandes)
+python src/data_generation/crm_data.py --start-date 2025-01-01 --end-date 2025-03-28
+
+# 2. Données publicitaires (campagnes marketing)
+python src/data_generation/advertising.py --start-date 2025-01-01 --end-date 2025-03-28
+
+# 3. Logs web (comportement utilisateur)
+python src/data_generation/web_data.py --mode batch --start-date 2025-01-01 --end-date 2025-03-28
+```
+
+Les données générées seront stockées dans le dossier `data/raw/` avec la structure suivante :
+- `data/raw/crm/` : Données clients et commandes
+- `data/raw/advertising/` : Données des campagnes publicitaires
+- `data/raw/web/` : Logs de navigation
+
+## 🛠️ Architecture technique
+
+L'architecture du projet repose sur les technologies suivantes :
+- **Apache Kafka** : Pour l'ingestion de données en temps réel
+- **Apache Spark** : Pour le traitement batch et streaming
+- **Apache Airflow** : Pour l'orchestration des pipelines de données
+- **Snowflake** : Pour le stockage et l'analyse des données
+- **dbt** : Pour la modélisation des données
+- **Tableau** : Pour la visualisation et les tableaux de bord
+
+## 📋 Backlog et gestion de projet
+
+Le projet est géré en mode agile avec des sprints de 2 semaines. Le backlog du produit est organisé en epics :
+1. Ingestion et stockage des données
+2. Transformation et enrichissement
+3. Orchestration et automatisation
+4. Dashboard - Performance produits
+5. Dashboard - Performance marketing
+6. Documentation et formation
+
+Pour plus de détails, consultez le fichier `docs/product_backlog.md`.

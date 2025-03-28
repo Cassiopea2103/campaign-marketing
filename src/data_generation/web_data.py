@@ -774,6 +774,7 @@ class WebEventGenerator:
             # Apply discount
             coupon_obj = random.choice(self.coupons)
             discount = 0
+            coupon = None  # Initialize with default value
             if coupon_obj:
                 discount_percent = coupon_obj["discount"]
                 coupon = coupon_obj["code"]
@@ -869,8 +870,8 @@ class WebEventGenerator:
             while self.running or not event_queue.empty():
                 try:
                     batch = []
-                    # Get up to 100 events at once if available
-                    for _ in range(100):
+                    # Get up to 20 events at once if available (smaller batch size)
+                    for _ in range(20):
                         if not event_queue.empty():
                             batch.append(event_queue.get(block=False))
                             event_queue.task_done()
@@ -879,6 +880,8 @@ class WebEventGenerator:
                     
                     if batch:
                         self.write_events(batch, output_format)
+                        # Add a short pause after each write to prevent overwhelming the system
+                        time.sleep(0.05)
                     else:
                         time.sleep(0.1)  # Short sleep if no events
                 except Exception as e:
@@ -904,28 +907,27 @@ class WebEventGenerator:
                     if expired > 0:
                         print(f"Cleaned {expired} expired sessions")
                 
-                # Generate a batch of events for a session
-                events = self.generate_session_events()
-                event_count += len(events)
+                # Generate a single session's events instead of a batch
+                # This creates more natural timing
+                session_events = self.generate_session_events(random.randint(1, 3))  # 1-3 events per session
+                event_count += len(session_events)
                 session_count += 1
                 
                 # Queue events for writing
-                for event in events:
+                for event in session_events:
                     event_queue.put(event)
+                    
+                    # Add more realistic timing by sleeping after each event
+                    # Adjust sleep time to match target rate with randomness
+                    sleep_time = seconds_per_event * random.uniform(0.5, 1.5)
+                    time.sleep(sleep_time)
                 
-                # Calculate sleep time to maintain target rate
-                # Adjust for the number of events generated
-                target_sleep = seconds_per_event * len(events)
+                # Add a pause between sessions to make traffic more realistic
+                # Sessions typically arrive with gaps between them
+                time.sleep(random.uniform(1.0, 3.0))
                 
-                # Add some randomness to make it more realistic
-                jitter = random.uniform(-0.1, 0.1) * target_sleep
-                sleep_time = max(0.01, target_sleep + jitter)
-                
-                # Sleep
-                time.sleep(sleep_time)
-                
-                # Periodic status update
-                if event_count % 500 == 0:
+                # Periodic status update (less frequent)
+                if event_count % 100 == 0:
                     elapsed = time.time() - start_time
                     rate = event_count / elapsed
                     print(f"Generated {event_count} events in {elapsed:.1f} seconds ({rate:.1f} events/sec)")
@@ -1085,13 +1087,15 @@ class WebEventGenerator:
                 
                 # Short delay to prevent resource exhaustion
                 if _ % 100 == 0:
-                    time.sleep(0.01)
+                    time.sleep(0.001)
             
             # Write all events for the day
             self.write_events(day_events, 'file')
             
             total_events += len(day_events)
             print(f"Generated {len(day_events)} events for {current_date.strftime('%Y-%m-%d')}")
+
+            
             
             # Move to next day
             current_date += datetime.timedelta(days=1)
