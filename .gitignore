@@ -1,1 +1,11 @@
 data/
+
+# Logs
+logs/
+*.log
+
+# Docker volumes
+postgres-db-volume/
+zookeeper-data/
+zookeeper-logs/
+kafka-data/
