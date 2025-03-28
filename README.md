@@ -32,7 +32,8 @@ Le tout est déployé dans un environnement conteneurisé avec Docker pour assur
 
 ### Architecture diagram
 
-![E-commerce Data Architecture](docs/architecture/ecommerce_architecture.png)
+![ecommerce_architecture](https://github.com/user-attachments/assets/0cf3f363-f6d3-47f5-bde1-f4b1c9f9a7de)
+
 
 *Architecture diagram showing the data flow from source systems through processing to analytics*
 
