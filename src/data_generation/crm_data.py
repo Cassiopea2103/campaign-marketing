@@ -116,21 +116,6 @@ for region, data in senegal_admin_structure.items():
         all_cities.append(city)
         city_to_region_map[city] = region
 
-cities = {}
-for region, region_cities in senegal_admin_structure.items():
-    # Donner plus de poids à Dakar
-    weight_multiplier = 3 if region == "Dakar" else 1
-    for city in region_cities:
-        cities[city] = 0.1 * weight_multiplier / len(region_cities)
-
-# Créer un mapping ville vers région
-city_to_region = {}
-for region, region_cities in senegal_admin_structure.items():
-    for city in region_cities:
-        city_to_region[city] = region
-
-
-
 def generate_senegalese_name():
     return random.choice(senegalese_first_names), random.choice(senegalese_last_names)
 
@@ -246,6 +231,10 @@ def generate_customers(num_customers=1000):
         
         # Location (weighted by population)
         city = random.choices(list(cities.keys()), weights=list(cities.values()))[0]
+
+        # Get the corresponding region for the city
+        region = city_to_region_map.get(city, "Dakar")  # Default to Dakar if not found
+
         
         # Registration and purchase dates
         registration_date = fake.date_time_between(start_date='-3y', end_date='now')
