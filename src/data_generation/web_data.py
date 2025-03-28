@@ -7,6 +7,12 @@ import time
 from faker import Faker
 import json
 import os
+import argparse
+import signal
+import threading
+import queue
+from tqdm import tqdm
+import glob
 
 # Set up Faker with locale support
 fake = Faker(['fr_FR'])  # French is widely spoken in Senegal
@@ -14,7 +20,7 @@ fake_sn = Faker(['en_US'])  # For non-locale specific items
 
 # Create output directory if it doesn't exist
 base_dir = os.path.dirname(os.path.abspath(__file__))
-output_dir = os.path.join(base_dir, '..' , '..',  'data', 'raw', 'web')
+output_dir = os.path.join(base_dir, '..', '..', 'data', 'raw', 'web')
 os.makedirs(output_dir, exist_ok=True)
 json_file_path = os.path.join(output_dir, 'web_logs.json')
 csv_file_path = os.path.join(output_dir, 'web_logs.csv')
@@ -120,74 +126,29 @@ for region, data in senegal_admin_structure.items():
 
 
 class WebEventGenerator:
-
-    def load_existing_ids():
-        """Charge les IDs CRM et les IDs de campagne existants depuis les fichiers générés"""
-        crm_ids = []
-        campaign_ids = []
-        crm_data = {}
+    def __init__(self, start_date=None, end_date=None, real_time=False):
+        """
+        Initialize the web event generator with options for time-based generation
         
-        # Tenter de charger les IDs CRM depuis le fichier customers.csv
-        try:
-            customers_path = os.path.join(base_dir, '..', '..', 'data', 'raw','crm', 'customers.csv')
-            if os.path.exists(customers_path):
-                customers_df = pd.read_csv(customers_path)
-                if 'customer_id' in customers_df.columns:
-                    crm_ids = customers_df['customer_id'].tolist()
-                    # load customer data for alignment : 
-                    for _, row in customers_df.iterrows():
-                        crm_data[row['customer_id']] = {
-                            'first_name': row['first_name'],
-                            'last_name': row['last_name'],
-                            'email': row['email'],
-                            'phone': row['phone'],
-                            'city': row.get('city', ''),
-                            'region': row.get('region', ''),
-                            'registration_date': row.get('registration_date', ''),
-                            # Ajouter d'autres champs pertinents au besoin
-                        }
-                print(f"Chargé {len(crm_ids)} IDs clients depuis {customers_path}")
-        except Exception as e:
-            print(f"Erreur lors du chargement des IDs CRM: {e}")
+        Parameters:
+        - start_date: Start date for historical data (YYYY-MM-DD)
+        - end_date: End date for historical data (YYYY-MM-DD)  
+        - real_time: If True, generate events at the current time, otherwise use the date range
+        """
+        self.real_time = real_time
         
-        # Tenter de charger les IDs de campagne depuis les fichiers d'advertising
-        try:
-            # Essayer google_ads.csv
-            ads_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising' , 'google_ads.csv')
-            if os.path.exists(ads_path):
-                ads_df = pd.read_csv(ads_path)
-                if 'campaign_id' in ads_df.columns:
-                    campaign_ids.extend(ads_df['campaign_id'].unique().tolist())
-            
-            # Essayer social_ads.csv
-            social_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising' ,  'social_ads.csv')
-            if os.path.exists(social_path):
-                social_df = pd.read_csv(social_path)
-                if 'campaign_id' in social_df.columns:
-                    campaign_ids.extend(social_df['campaign_id'].unique().tolist())
-                    
-            # Essayer influencer_campaigns.csv
-            inf_path = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising' , 'influencer_campaigns.csv')
-            if os.path.exists(inf_path):
-                inf_df = pd.read_csv(inf_path)
-                if 'campaign_id' in inf_df.columns:
-                    campaign_ids.extend(inf_df['campaign_id'].unique().tolist())
-                    
-            campaign_ids = list(set(campaign_ids))  # Éliminer les doublons
-            print(f"Chargé {len(campaign_ids)} IDs de campagne depuis les fichiers d'advertising")
-        except Exception as e:
-            print(f"Erreur lors du chargement des IDs de campagne: {e}")
+        # For historical data generation
+        self.start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d') if start_date else datetime.datetime(2025, 1, 1)
+        self.end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d') if end_date else datetime.datetime(2025, 3, 28)
+        self.current_date = self.start_date
         
-        return crm_ids, campaign_ids, crm_data
-
-
-    def __init__(self, crm_ids=None, campaign_ids=None, crm_data=None):
-        """Initialize the web event generator with optional CRM and campaign IDs for data alignment"""
-        # Allow injection of IDs from other sources for alignment
-        self.crm_ids = crm_ids or []  # Customer IDs from CRM
-        self.campaign_ids = campaign_ids or []  # Campaign IDs from advertising data
-        self.crm_data = crm_data or {}  # Complete CRM data
-
+        # Load reference data for consistency
+        self.crm_ids, self.campaign_ids, self.crm_data = self.load_existing_ids()
+        
+        # Session management
+        self.active_sessions = {}  # track ongoing sessions
+        self.session_timeout = 30 * 60  # session timeout in seconds (30 minutes)
+        
         # Define product categories and products - including popular cosmetics in Senegal
         self.categories = ["soin_visage", "soin_corps", "soin_cheveux", "maquillage", "parfum", "homme", "bio", "traditionnel"]
         self.products = [
@@ -271,7 +232,14 @@ class WebEventGenerator:
         }
         
         # Coupons
-        self.coupons = [None, None, None, "TABASKI10", "BIENVENUE", "RAMADAN20", "NOEL15", "DECOUVERTE"]
+        self.coupons = [
+            None, None, None,
+            {"code": "TABASKI10", "discount": 10},
+            {"code": "BIENVENUE", "discount": 10},
+            {"code": "RAMADAN20", "discount": 20},
+            {"code": "NOEL15", "discount": 15},
+            {"code": "DECOUVERTE", "discount": 15}
+        ]
 
         self.senegal_email_domains = ["orange.sn", "gmail.com", "yahoo.fr", "hotmail.fr", "outlook.com", "free.sn"]
 
@@ -305,16 +273,174 @@ class WebEventGenerator:
             "Autres régions": {"cost": 5000, "free_threshold": 30000}
         }
 
-
+    def load_existing_ids(self):
+        """Load CRM and campaign IDs for data alignment"""
+        crm_ids = []
+        campaign_ids = []
+        crm_data = {}
+        
+        # Load customer IDs from registry
+        crm_registry = os.path.join(base_dir, '..', '..', 'data', 'raw', 'crm', 'customer_ids.txt')
+        if os.path.exists(crm_registry):
+            with open(crm_registry, 'r') as f:
+                crm_ids = [line.strip() for line in f.readlines()]
+        
+        # Load campaign IDs from registry
+        campaign_registry = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising', 'campaign_ids.txt')
+        if os.path.exists(campaign_registry):
+            with open(campaign_registry, 'r') as f:
+                campaign_ids = [line.strip() for line in f.readlines()]
+        
+        # Attempt to load detailed customer data for enhanced alignment
+        try:
+            # Find latest customers file
+            customer_files = sorted(glob.glob(os.path.join(base_dir, '..', '..', 'data', 'raw', 'crm', 'customers_*.csv')))
+            if customer_files:
+                latest_file = customer_files[-1]
+                customers_df = pd.read_csv(latest_file)
+                
+                # Create customer data dictionary
+                for _, row in customers_df.iterrows():
+                    crm_data[row['customer_id']] = {
+                        'first_name': row['first_name'],
+                        'last_name': row['last_name'],
+                        'email': row['email'],
+                        'phone': row.get('phone', ''),
+                        'city': row.get('city', ''),
+                        'region': row.get('region', ''),
+                        'registration_date': row.get('registration_date', ''),
+                        'favorite_category': row.get('favorite_category', '')
+                    }
+        except Exception as e:
+            print(f"Warning: Could not load detailed customer data: {e}")
+            
+        print(f"Loaded {len(crm_ids)} customer IDs and {len(campaign_ids)} campaign IDs for alignment")
+        return crm_ids, campaign_ids, crm_data
+    
+    def update_current_date(self, new_date=None):
+        """Update the current date for historical generation"""
+        if new_date:
+            self.current_date = new_date
+        else:
+            # Move to next day
+            self.current_date += datetime.timedelta(days=1)
+            if self.current_date > self.end_date:
+                self.current_date = self.start_date  # Wrap around
+    
+    def clean_expired_sessions(self, current_time=None):
+        """Remove expired sessions based on timeout"""
+        if current_time is None:
+            current_time = datetime.datetime.now() if self.real_time else self.current_date
+            
+        expired_sessions = []
+        
+        for session_id, session in self.active_sessions.items():
+            last_activity = session.get('last_activity')
+            if last_activity:
+                time_diff = (current_time - last_activity).total_seconds()
+                if time_diff > self.session_timeout:
+                    expired_sessions.append(session_id)
+        
+        # Remove expired sessions
+        for session_id in expired_sessions:
+            del self.active_sessions[session_id]
+            
+        return len(expired_sessions)
+    
+    def calculate_realistic_timestamp(self, base_time=None):
+        """Calculate a realistic timestamp based on time of day patterns"""
+        if base_time is None:
+            base_time = datetime.datetime.now() if self.real_time else self.current_date
+            
+        # If historical, add random hour/minute/second
+        if not self.real_time:
+            # Hour weights based on typical e-commerce traffic patterns
+            hour_weights = [1, 1, 1, 1, 1, 2, 2, 3, 5, 8, 10, 12, 12, 10, 11, 12, 14, 15, 20, 25, 22, 15, 8, 3]
+            hour = random.choices(range(24), weights=hour_weights)[0]
+            minute = random.randint(0, 59)
+            second = random.randint(0, 59)
+            
+            return base_time.replace(hour=hour, minute=minute, second=second)
+        
+        return base_time
+    
+    def generate_session_events(self, num_events=None):
+        """Generate a complete user session with multiple events"""
+        # Create or select session
+        if random.random() < 0.8:  # 80% new sessions, 20% continue existing
+            # Create new session
+            session_id = str(uuid.uuid4())
+            # Decide if user is authenticated
+            is_authenticated = random.random() < 0.3  # 30% of sessions are authenticated
+            user = self.generate_user(authenticated=is_authenticated)
+            current_url = None  # Start at homepage
+            events = []
+        else:
+            # Try to continue an existing session
+            if not self.active_sessions:
+                # No active sessions, create new
+                session_id = str(uuid.uuid4())
+                is_authenticated = random.random() < 0.3
+                user = self.generate_user(authenticated=is_authenticated)
+                current_url = None
+                events = []
+            else:
+                # Select an active session
+                session_id = random.choice(list(self.active_sessions.keys()))
+                session = self.active_sessions[session_id]
+                user = session.get('user')
+                current_url = session.get('current_url')
+                events = session.get('events', [])
+        
+        # Determine number of events for this generation cycle
+        if num_events is None:
+            # If continuing a session, fewer new events
+            if current_url is not None:
+                num_events = random.randint(1, 3)
+            else:
+                num_events = random.randint(1, 8)
+        
+        # Generate timestamp
+        timestamp = self.calculate_realistic_timestamp()
+        
+        # Generate events
+        new_events = []
+        for i in range(num_events):
+            # Events happen with small time increments
+            if i > 0:
+                timestamp += datetime.timedelta(seconds=random.randint(5, 180))
+            
+            # Generate event
+            event = self.generate_event(
+                session_id=session_id,
+                user=user,
+                current_url=current_url,
+                timestamp=timestamp
+            )
+            
+            # Update current URL for next event
+            if "page" in event and "url" in event["page"]:
+                current_url = event["page"]["url"].replace("https://www.biocosmetics.sn", "")
+            elif "product" in event and "url" in event["product"]:
+                current_url = event["product"]["url"].replace("https://www.biocosmetics.sn", "")
+            
+            new_events.append(event)
+            events.append(event)
+        
+        # Update session data
+        self.active_sessions[session_id] = {
+            'user': user,
+            'current_url': current_url,
+            'last_activity': timestamp,
+            'events': events
+        }
+        
+        return new_events
+    
     def generate_sn_ip(self):
         """Generate a realistic IP address (simulating Senegalese IPs)"""
         prefixes = ["41.82.", "41.83.", "154.124.", "196.1."]
         return f"{random.choice(prefixes)}{random.randint(0, 255)}.{random.randint(0, 255)}"
-    
-    def generate_session(self):
-        """Generate a new user session ID"""
-        return str(uuid.uuid4())
-    
     
     def generate_senegal_email(self, first_name=None, last_name=None):
         """Generate an email with a Senegalese name and domain"""
@@ -346,18 +472,18 @@ class WebEventGenerator:
         prefix = random.choice(['77', '78', '76', '70', '75'])
         suffix = ''.join([str(random.randint(0, 9)) for _ in range(7)])
         return f"+221{prefix}{suffix}"
-        
+    
     def generate_user(self, authenticated=None):
         """Generate a user (anonymous or authenticated)"""
         is_authenticated = authenticated if authenticated is not None else random.random() < 0.5 
         
         if is_authenticated:
-            # Obtenir un ID utilisateur
+            # Try to use a real customer ID from CRM for better data alignment
             if self.crm_ids and random.random() < 0.8:
                 crm_id = random.choice(self.crm_ids)
                 user_id = crm_id
 
-            # Utiliser les données existantes du CRM si disponibles
+                # Use the detailed CRM data if available
                 if user_id in self.crm_data:
                     crm_user = self.crm_data[user_id]
                     user = {
@@ -368,17 +494,19 @@ class WebEventGenerator:
                         "authenticated": True,
                         "registration_date": crm_user.get('registration_date', fake.date_time_this_year().isoformat()),
                         "user_segment": random.choice(["new", "regular", "vip", "diaspora"]),
-                        "phone": crm_user['phone']
+                        "phone": crm_user.get('phone', self.generate_senegal_phone()),
+                        "favorite_category": crm_user.get('favorite_category', random.choice(self.categories))
                     }
                     return user
-            else:
-                user_id = f"U{random.randint(10000, 99999)}"
+                
+            # Otherwise generate a synthetic user
+            user_id = f"U{random.randint(10000, 99999)}"
             
-            # Générer un prénom et un nom sénégalais
+            # Generate a Senegalese name
             first_name = random.choice(senegalese_first_names)
             last_name = random.choice(senegalese_last_names)
             
-            # Générer un email basé sur ces noms
+            # Generate email based on name
             email = self.generate_senegal_email(first_name, last_name)
             
             user = {
@@ -389,7 +517,8 @@ class WebEventGenerator:
                 "authenticated": True,
                 "registration_date": fake.date_time_this_year().isoformat(),
                 "user_segment": random.choice(["new", "regular", "vip", "diaspora"]),
-                "phone": self.generate_senegal_phone()
+                "phone": self.generate_senegal_phone(),
+                "favorite_category": random.choice(self.categories)
             }
         else:
             user = {
@@ -403,7 +532,7 @@ class WebEventGenerator:
         """Generate a web event"""
         # Create a new session if not provided
         if not session_id:
-            session_id = self.generate_session()
+            session_id = str(uuid.uuid4())
             
         # Create a user if not provided
         if not user:
@@ -472,9 +601,11 @@ class WebEventGenerator:
         # Marketing attribution
         traffic_source = random.choice(self.traffic_sources)
         traffic_medium = random.choice(self.utm_mediums)
-
-        city = random.choices(all_cities, weights=[self.cities.get(c, 0.01) for c in all_cities])[0]
-        region = city_to_region_map[city]
+        
+        # Choose a city, weighted by population
+        city_weights = [self.cities.get(c, 0.01) for c in all_cities]
+        city = random.choices(all_cities, weights=city_weights)[0]
+        region = city_to_region_map.get(city, "Dakar")  # Default to Dakar if not found
         
         # Base event data
         event_base = {
@@ -508,7 +639,6 @@ class WebEventGenerator:
         # Add campaign reference if applicable
         if self.campaign_ids and random.random() < 0.4:  # 40% chance to be linked to a campaign
             campaign_id = random.choice(self.campaign_ids)
-            selected_source = None
             
             # Check if the campaign already contains the ID or choose randomly
             current_campaign = event_base["marketing"]["campaign"]
@@ -518,7 +648,6 @@ class WebEventGenerator:
             if (current_campaign and campaign_str in current_campaign) or random.random() < 0.3:
                 # Find a compatible source for this campaign
                 for source, channels in self.ad_traffic_sources.items():
-                    selected_source = source
                     event_base["marketing"]["source"] = source
                     event_base["marketing"]["campaign"] = campaign_str
                     event_base["marketing"]["channel"] = random.choice(channels)
@@ -562,12 +691,18 @@ class WebEventGenerator:
                 "visit_duration": duration  # Page visit duration in seconds
             }
             
-            # Determine the next URL for this session's flow
-            next_url = page_url
-        
         elif event_type == "product_view":
-            # Select a product
-            product = random.choice(self.products)
+            # For users with a favorite category, 70% chance to view products in that category
+            if user.get('authenticated') and user.get('favorite_category') and random.random() < 0.7:
+                favorite_category = user.get('favorite_category')
+                category_products = [p for p in self.products if p["categorie"] == favorite_category]
+                if category_products:
+                    product = random.choice(category_products)
+                else:
+                    product = random.choice(self.products)
+            else:
+                # Otherwise select a random product
+                product = random.choice(self.products)
             
             event_base["product"] = {
                 "product_id": product["id"],
@@ -576,9 +711,6 @@ class WebEventGenerator:
                 "category": product["categorie"],
                 "url": f"https://www.biocosmetics.sn/produits/{product['id']}"
             }
-            
-            # Next URL is the product page
-            next_url = f"/produits/{product['id']}"
             
         elif event_type in ["add_to_cart", "remove_from_cart"]:
             # Select a product
@@ -592,85 +724,413 @@ class WebEventGenerator:
                 "category": product["categorie"],
                 "quantity": quantity
             }
+        
+        elif event_type == "begin_checkout":
+            # Items in cart
+            num_items = random.randint(1, 4)
+            cart_items = []
+            cart_total = 0
+            
+            for _ in range(num_items):
+                product = random.choice(self.products)
+                quantity = random.randint(1, 2)
+                item_price = product["prix"]
+                cart_total += item_price * quantity
+                
+                cart_items.append({
+                    "product_id": product["id"],
+                    "name": product["nom"],
+                    "price": product["prix"],
+                    "category": product["categorie"],
+                    "quantity": quantity
+                })
+            
+            event_base["cart"] = {
+                "items": cart_items,
+                "total": cart_total,
+                "coupon": random.choice(self.coupons)
+            }
+            
+        elif event_type == "purchase":
+            # Items purchased
+            num_items = random.randint(1, 4)
+            purchased_items = []
+            purchase_total = 0
+            
+            for _ in range(num_items):
+                product = random.choice(self.products)
+                quantity = random.randint(1, 2)
+                item_price = product["prix"]
+                purchase_total += item_price * quantity
+                
+                purchased_items.append({
+                    "product_id": product["id"],
+                    "name": product["nom"],
+                    "price": product["prix"],
+                    "category": product["categorie"],
+                    "quantity": quantity
+                })
+            
+            # Apply discount
+            coupon_obj = random.choice(self.coupons)
+            discount = 0
+            if coupon_obj:
+                discount_percent = coupon_obj["discount"]
+                coupon = coupon_obj["code"]
+                discount = int(purchase_total * discount_percent / 100)
+            # Shipping cost
+            shipping_cost = 0 if purchase_total > 25000 else random.choice([2000, 3000, 4000])
+            
+            # Payment method
+            payment_method = random.choices(
+                list(self.payment_methods.keys()),
+                weights=list(self.payment_methods.values())
+            )[0]
+            
+            event_base["purchase"] = {
+                "order_id": f"ORD-{uuid.uuid4().hex[:8]}",
+                "items": purchased_items,
+                "subtotal": purchase_total,
+                "discount": discount,
+                "coupon": coupon,
+                "shipping": shipping_cost,
+                "total": purchase_total - discount + shipping_cost,
+                "payment_method": payment_method,
+                "currency": "XOF"  # CFA Franc
+            }
+            
+        elif event_type == "search":
+            # Search terms related to cosmetics in French
+            search_terms = [
+                "crème hydratante",
+                "huile de karité",
+                "savon noir",
+                "soin visage",
+                "masque argile",
+                "anti-taches",
+                "huile de baobab",
+                "shampoing naturel",
+                "maquillage peau noire",
+                "parfum bio"
+            ]
+            
+            event_base["search"] = {
+                "query": random.choice(search_terms),
+                "results_count": random.randint(0, 12)
+            }
+            
+        elif event_type == "filter_products":
+            # Filter options
+            filter_options = {
+                "category": random.choice(self.categories),
+                "price_range": random.choice(["0-5000", "5000-10000", "10000-20000", "20000+"]),
+                "sort_by": random.choice(["popularity", "price_asc", "price_desc", "newest"]),
+                "rating": random.choice(["4+", "3+", "all"])
+            }
+            
+            event_base["filter"] = filter_options
+        
         return event_base
-
-
-def generate_web_logs(num_sessions):
-    """Generate web logs for the specified number of sessions"""
-    logs_data = []
-
-    # load CRM and advertising IDs :
-    crm_ids, campaign_ids, crm_data = WebEventGenerator.load_existing_ids()
-
         
-    # Create generator instance
-    generator = WebEventGenerator(crm_ids=crm_ids, campaign_ids=campaign_ids, crm_data=crm_data)
+    def run_continuous_generation(self, output_format='file', events_per_minute=50, duration_seconds=None):
+        """
+        Run continuous event generation
         
-    for _ in range(num_sessions):
-        # Create a new session
-        session_id = generator.generate_session()
-            
-        # Decide if user is authenticated
-        is_authenticated = random.random() < 0.3  # 30% of sessions are authenticated
-        user = generator.generate_user(authenticated=is_authenticated)
-            
-        # Generate between 1 and 20 events per session
-        num_events = random.randint(1, 20)
-            
-        # Session timestamp (starting point)
-        session_start = fake.date_time_this_month()
-            
-        # Track current URL as we navigate
-        current_url = None
-            
-        for i in range(num_events):
-            # Events happen with small time increments (1-5 minutes)
-            current_time = session_start + datetime.timedelta(minutes=i*random.randint(1, 5))
-                
-            # Generate event
-            event = generator.generate_event(
-                session_id=session_id, 
-                user=user, 
-                current_url=current_url, 
-                timestamp=current_time
-            )
-                
-            # Check if event is not None before processing
-            if event is not None:
-                # Update current URL for next event
-                if "page" in event and "url" in event["page"]:
-                    current_url = event["page"]["url"].replace("https://www.biocosmetics.sn", "")
-                elif "product" in event and "url" in event["product"]:
-                    current_url = event["product"]["url"].replace("https://www.biocosmetics.sn", "")
+        Parameters:
+        - output_format: 'file' or 'kafka'
+        - events_per_minute: Target events per minute
+        - duration_seconds: How long to run, or None for indefinite
+        """
+        # Set up signal handling for graceful shutdown
+        self.running = True
+        
+        def signal_handler(sig, frame):
+            print("Shutting down web log generator...")
+            self.running = False
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        # Calculate timing
+        seconds_per_event = 60.0 / events_per_minute
+        
+        # Track statistics
+        start_time = time.time()
+        event_count = 0
+        session_count = 0
+        
+        print(f"Starting continuous web log generation at {events_per_minute} events per minute...")
+        print("Press Ctrl+C to stop")
+        
+        # Event queue for asynchronous writing
+        event_queue = queue.Queue(maxsize=1000)
+        
+        # Writer thread function
+        def event_writer():
+            while self.running or not event_queue.empty():
+                try:
+                    batch = []
+                    # Get up to 100 events at once if available
+                    for _ in range(100):
+                        if not event_queue.empty():
+                            batch.append(event_queue.get(block=False))
+                            event_queue.task_done()
+                        else:
+                            break
                     
-                logs_data.append(event)
+                    if batch:
+                        self.write_events(batch, output_format)
+                    else:
+                        time.sleep(0.1)  # Short sleep if no events
+                except Exception as e:
+                    print(f"Error in writer thread: {e}")
+                    time.sleep(1)  # Delay on error
         
-    return logs_data
+        # Start writer thread
+        writer_thread = threading.Thread(target=event_writer, daemon=True)
+        writer_thread.start()
+        
+        try:
+            # Main generation loop
+            while self.running:
+                # Check if duration has expired
+                if duration_seconds and (time.time() - start_time) > duration_seconds:
+                    print(f"Reached specified duration of {duration_seconds} seconds")
+                    self.running = False
+                    break
+                
+                # Clean expired sessions periodically
+                if event_count % 100 == 0:
+                    expired = self.clean_expired_sessions()
+                    if expired > 0:
+                        print(f"Cleaned {expired} expired sessions")
+                
+                # Generate a batch of events for a session
+                events = self.generate_session_events()
+                event_count += len(events)
+                session_count += 1
+                
+                # Queue events for writing
+                for event in events:
+                    event_queue.put(event)
+                
+                # Calculate sleep time to maintain target rate
+                # Adjust for the number of events generated
+                target_sleep = seconds_per_event * len(events)
+                
+                # Add some randomness to make it more realistic
+                jitter = random.uniform(-0.1, 0.1) * target_sleep
+                sleep_time = max(0.01, target_sleep + jitter)
+                
+                # Sleep
+                time.sleep(sleep_time)
+                
+                # Periodic status update
+                if event_count % 500 == 0:
+                    elapsed = time.time() - start_time
+                    rate = event_count / elapsed
+                    print(f"Generated {event_count} events in {elapsed:.1f} seconds ({rate:.1f} events/sec)")
+        
+        finally:
+            # Ensure writer processes remaining events
+            print("Waiting for writer to finish...")
+            event_queue.join()
+            print(f"Generation complete: {event_count} events across {session_count} sessions")
+    
+    def write_events(self, events, output_format):
+        """Write events to the specified output format"""
+        if not events:
+            return
+        
+        # Get timestamp for filenames
+        timestamp = datetime.datetime.now().strftime('%Y%m%d')
+        
+        if output_format == 'file':
+            # Write to timestamped JSON file
+            json_file_path = os.path.join(output_dir, f'web_logs_{timestamp}.json')
+            with open(json_file_path, 'a', encoding='utf-8') as f:
+                for event in events:
+                    f.write(json.dumps(event, ensure_ascii=False) + '\n')
+                    
+            # Also update a cumulative CSV for easier analysis
+            # This is inefficient for high-volume streaming but useful for demo purposes
+            try:
+                # Flatten the event for CSV (top-level fields only)
+                flat_events = []
+                for event in events:
+                    flat_event = {
+                        'event_id': event.get('event_id'),
+                        'event_type': event.get('event_type'),
+                        'timestamp': event.get('timestamp'),
+                        'session_id': event.get('session_id'),
+                        'user_id': event.get('user', {}).get('user_id'),
+                        'authenticated': event.get('user', {}).get('authenticated', False),
+                        'device_type': event.get('device', {}).get('type'),
+                        'browser': event.get('device', {}).get('browser'),
+                        'is_mobile': event.get('device', {}).get('is_mobile', False),
+                        'country': event.get('location', {}).get('country'),
+                        'city': event.get('location', {}).get('city'),
+                        'region': event.get('location', {}).get('region'),
+                        'source': event.get('marketing', {}).get('source'),
+                        'campaign': event.get('marketing', {}).get('campaign'),
+                        'medium': event.get('marketing', {}).get('medium'),
+                        'campaign_id': event.get('marketing', {}).get('campaign_id')
+                    }
+                    
+                    # Add page-specific fields if available
+                    if 'page' in event:
+                        flat_event['page_url'] = event['page'].get('url')
+                        flat_event['referrer'] = event['page'].get('referrer')
+                        flat_event['visit_duration'] = event['page'].get('visit_duration')
+                    
+                    # Add product-specific fields if available
+                    if 'product' in event:
+                        flat_event['product_id'] = event['product'].get('product_id')
+                        flat_event['product_name'] = event['product'].get('name')
+                        flat_event['product_price'] = event['product'].get('price')
+                        flat_event['product_category'] = event['product'].get('category')
+                        flat_event['quantity'] = event['product'].get('quantity')
+                    
+                    flat_events.append(flat_event)
+                
+                # Create DataFrame and append to CSV
+                df = pd.DataFrame(flat_events)
+                csv_file_path = os.path.join(output_dir, f'web_logs_{timestamp}.csv')
+                
+                # Write with or without header
+                if not os.path.exists(csv_file_path):
+                    df.to_csv(csv_file_path, index=False)
+                else:
+                    df.to_csv(csv_file_path, mode='a', header=False, index=False)
+                    
+            except Exception as e:
+                print(f"Warning: CSV conversion error: {e}")
+                
+        elif output_format == 'kafka':
+            # Kafka integration - can be implemented based on your Kafka setup
+            # For example using kafka-python:
+            # from kafka import KafkaProducer
+            # producer = KafkaProducer(bootstrap_servers='localhost:9092')
+            # for event in events:
+            #     producer.send('web_logs', json.dumps(event).encode('utf-8'))
+            pass
+                
+    def generate_historical_data(self, start_date, end_date, daily_event_count=5000):
+        """Generate historical data for a date range"""
+        print(f"Generating historical web logs from {start_date} to {end_date}")
+        
+        # Set up date range
+        self.start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        self.current_date = self.start_date
+        self.real_time = False
+        
+        # Process each day
+        current_date = self.start_date
+        total_events = 0
+        
+        while current_date <= self.end_date:
+            # Update generator's current date
+            self.current_date = current_date
+            date_str = current_date.strftime('%Y%m%d')
+            
+            print(f"Generating data for {current_date.strftime('%Y-%m-%d')}...")
+            
+            # Calculate event count for this day with some variation
+            # Weekends have less traffic
+            weekday = current_date.weekday()
+            weekend_factor = 0.7 if weekday >= 5 else 1.0
+            
+            # Special days have more traffic
+            month = current_date.month
+            day = current_date.day
+            
+            # Boost factors for special periods
+            special_factor = 1.0
+            
+            # Ramadan effect (approximate)
+            if month == 4:
+                special_factor = 1.3
+            
+            # Tabaski effect (approximate)
+            elif month == 9 and day > 15:
+                special_factor = 1.4
+            
+            # End of year shopping
+            elif month == 12:
+                if day < 15:
+                    special_factor = 1.2
+                else:
+                    special_factor = 1.5  # Higher closer to holidays
+            
+            # Sales periods
+            elif month == 2 or month == 7:
+                special_factor = 1.2
+            
+            # Calculate final event count with randomness
+            day_event_count = int(daily_event_count * weekend_factor * special_factor * random.uniform(0.9, 1.1))
+            
+            # Generate events for the day
+            day_events = []
+            
+            # Generate in sessions for more realism
+            sessions_to_generate = day_event_count // 5  # Average 5 events per session
+            
+            for _ in tqdm(range(sessions_to_generate), desc=f"Generating {day_event_count} events", unit="session"):
+                # Random events per session (1-10)
+                session_event_count = min(10, max(1, int(np.random.poisson(5))))
+                
+                # Generate all events for this session
+                session_events = self.generate_session_events(session_event_count)
+                day_events.extend(session_events)
+                
+                # Short delay to prevent resource exhaustion
+                if _ % 100 == 0:
+                    time.sleep(0.01)
+            
+            # Write all events for the day
+            self.write_events(day_events, 'file')
+            
+            total_events += len(day_events)
+            print(f"Generated {len(day_events)} events for {current_date.strftime('%Y-%m-%d')}")
+            
+            # Move to next day
+            current_date += datetime.timedelta(days=1)
+            
+            # Clean up sessions between days
+            self.active_sessions = {}
+        
+        print(f"Historical data generation complete: {total_events} events")
 
-# Generate logs
-num_sessions = 5000  # Adjust as needed
-logs_data = generate_web_logs(num_sessions)
 
-# Save as JSON (for streaming simulation)
-try:
-    with open(json_file_path, 'w', encoding='utf-8') as f:
-        for log in logs_data:
-            f.write(json.dumps(log, ensure_ascii=False) + '\n')
-    print(f"Données JSON sauvegardées dans {json_file_path}")
-except Exception as e:
-    print(f"Erreur lors de l'écriture du fichier JSON: {e}")
-
-# Also save as CSV for easier analysis
-try:
-    df = pd.DataFrame(logs_data)
-    df.to_csv(csv_file_path, index=False)
-    print(f"Données CSV sauvegardées dans {csv_file_path}")
-except Exception as e:
-    print(f"Erreur lors de l'écriture du fichier CSV: {e}")
-
-print(f"Generated {len(logs_data)} web log events from {num_sessions} sessions")
-print(f"Files saved to 'data/web/web_logs.json' and 'data/web/web_logs.csv'")
-
-# Preview some data
-print("\nPreview of generated data:")
-print(df.head())
+# Main execution
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Generate web log data with time progression')
+    parser.add_argument('--mode', choices=['batch', 'stream'], default='batch',
+                      help='Generation mode: batch (historical) or stream (continuous)')
+    parser.add_argument('--start-date', default='2025-01-01', help='Start date for historical data (YYYY-MM-DD)')
+    parser.add_argument('--end-date', default='2025-03-28', help='End date for historical data (YYYY-MM-DD)')
+    parser.add_argument('--events-per-day', type=int, default=5000, help='Average events per day for historical mode')
+    parser.add_argument('--events-per-minute', type=int, default=50, help='Events per minute for streaming mode')
+    parser.add_argument('--duration', type=int, default=None, help='Duration in seconds for streaming mode')
+    parser.add_argument('--output', choices=['file', 'kafka'], default='file',
+                      help='Output format (file or kafka)')
+    
+    args = parser.parse_args()
+    
+    # Create generator
+    generator = WebEventGenerator(start_date=args.start_date, end_date=args.end_date, real_time=(args.mode == 'stream'))
+    
+    if args.mode == 'batch':
+        # Generate historical data
+        generator.generate_historical_data(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            daily_event_count=args.events_per_day
+        )
+    else:
+        # Run continuous generation
+        generator.run_continuous_generation(
+            output_format=args.output,
+            events_per_minute=args.events_per_minute,
+            duration_seconds=args.duration
+        )
