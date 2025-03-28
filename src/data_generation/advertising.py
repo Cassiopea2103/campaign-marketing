@@ -5,12 +5,20 @@ import datetime
 from faker import Faker
 import os
 import uuid
+import argparse
+from tqdm import tqdm
+import glob
 
-# Set up Faker with locale support - correction du locale non supporté fr_SN
-fake = Faker(['fr_FR'])  # Utilisation seulement de fr_FR au lieu de fr_SN
+# Set up Faker with locale support
+fake = Faker(['fr_FR'])
 Faker.seed(42)  # For reproducibility
 
-# Ajout des noms et prénoms sénégalais
+# Create output directory if it doesn't exist
+base_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising')
+os.makedirs(output_dir, exist_ok=True)
+
+# Senegalese names for personalization
 senegalese_first_names = [
     "Mamadou", "Abdoulaye", "Ousmane", "Modou", "Ibrahima", "Cheikh", "Moussa", "Assane",
     "Pape", "Idrissa", "Alioune", "Mbaye", "Samba", "Babacar", "Seydou", "Omar", "Aliou",
@@ -41,21 +49,6 @@ senegalese_last_names = [
     "Nguirane", "Diassy", "Koné", "Tounkara", "Bathily", "Coulibaly", "Touré",
     "Sow", "Bocar", "Barry", "Khouma"
 ]
-
-# Fonction pour générer un nom sénégalais
-def generate_senegalese_name():
-    first_name = random.choice(senegalese_first_names)
-    last_name = random.choice(senegalese_last_names)
-    return f"{first_name} {last_name}"
-
-# Create output directory if it doesn't exist
-base_dir = os.path.dirname(os.path.abspath(__file__))
-output_dir = os.path.join(base_dir, '..', '..', 'data', 'raw', 'advertising')
-os.makedirs(output_dir, exist_ok=True)
-
-# Date range for data generation
-start_date = datetime.datetime(2024, 1, 1)
-end_date = datetime.datetime(2025, 3, 15)  # Current date in the scenario
 
 # Define ad platforms with their characteristics
 platforms = {
@@ -127,510 +120,740 @@ audiences = [
 # Product categories
 categories = ["soin_visage", "soin_corps", "soin_cheveux", "maquillage", "parfum"]
 
-# Generate Google Ads data
-def generate_google_ads(start_date, end_date, num_campaigns=50):
-    ads_data = []
-    
-    # Budget distribution throughout the year with peaks during holidays
-    def get_budget_multiplier(date):
-        month = date.month
-        day = date.day
+class AdvertisingDataGenerator:
+    def __init__(self, start_date=None, end_date=None, snapshot_frequency='daily'):
+        self.start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d') if start_date else datetime.datetime(2025, 1, 1)
+        self.end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d') if end_date else datetime.datetime(2025, 3, 28)
         
-        # Ramadan (approximate - varies yearly)
-        if month == 4:
-            return 1.5
-        # Tabaski (approximate - varies yearly)
-        elif month == 9 and day > 15:
-            return 1.4
-        # End of year holidays
-        elif month == 12:
-            return 1.6
-        # Sales periods
-        elif month == 2 or month == 7:
-            return 1.3
-        # Regular periods
+        # Set frequency for snapshot generation
+        if snapshot_frequency == 'daily':
+            self.freq = 'D'
+        elif snapshot_frequency == 'weekly':
+            self.freq = 'W'
+        elif snapshot_frequency == 'monthly':
+            self.freq = 'M'
         else:
-            return 1.0
+            self.freq = 'D'  # Default to daily
+            
+        # Store existing campaigns
+        self.active_campaigns = {
+            "google": [],
+            "social": [],
+            "influencer": []
+        }
+        
+        # Campaign ID registry for other scripts
+        self.campaign_id_registry = os.path.join(output_dir, 'campaign_ids.txt')
+        
+        # Store customer IDs for alignment with CRM
+        self.customer_ids = self.load_customer_ids()
+        
+        # Track current simulation date
+        self.current_date = self.start_date
+        
+    def load_customer_ids(self):
+        """Load customer IDs from CRM for alignment"""
+        crm_registry = os.path.join(base_dir, '..', '..', 'data', 'raw', 'crm', 'customer_ids.txt')
+        customer_ids = []
+        
+        if os.path.exists(crm_registry):
+            with open(crm_registry, 'r') as f:
+                customer_ids = [line.strip() for line in f.readlines()]
+        
+        print(f"Loaded {len(customer_ids)} customer IDs for alignment")
+        return customer_ids
     
-    # Keywords related to cosmetics in Senegal (French language)
-    keywords = [
-        "produits cosmétiques naturels",
-        "soins peau noire",
-        "crème anti-tache",
-        "beurre de karité pur",
-        "huile de baobab bio",
-        "produits éclaircissants naturels",
-        "soins cheveux crépus",
-        "cosmétiques bio Dakar",
-        "maquillage peau foncée",
-        "parfum sans alcool",
-        "savon noir africain",
-        "traitement acné peau noire",
-        "cosmétiques Sénégal",
-        "huile de coco cheveux",
-        "masque visage naturel"
-    ]
+    def initialize_campaigns(self):
+        """Initialize campaigns at the start date"""
+        print("Initializing advertising campaigns...")
+        
+        # Generate initial campaigns with various start/end dates
+        # Some campaigns are already active, others will start in the future
+        
+        # Google Ads campaigns (10 initial)
+        google_campaigns = self.generate_google_campaigns(10, self.start_date)
+        self.active_campaigns["google"] = google_campaigns
+        
+        # Social media campaigns (15 initial)
+        social_campaigns = self.generate_social_campaigns(15, self.start_date)
+        self.active_campaigns["social"] = social_campaigns
+        
+        # Influencer campaigns (8 initial)
+        influencer_campaigns = self.generate_influencer_campaigns(8, self.start_date)
+        self.active_campaigns["influencer"] = influencer_campaigns
+        
+        # Save initial campaign IDs to registry
+        self.update_campaign_registry()
+        
+        print(f"Initialized {len(google_campaigns)} Google campaigns, {len(social_campaigns)} social campaigns, and {len(influencer_campaigns)} influencer campaigns")
     
-    # Create campaigns
-    for i in range(num_campaigns):
-        campaign_id = f"GAD-{i+1000}"
-        campaign_name = f"{random.choice(campaign_themes)} - {random.choice(categories)}"
+    def update_campaign_registry(self):
+        """Update the campaign ID registry file"""
+        with open(self.campaign_id_registry, 'w') as f:
+            for platform, campaigns in self.active_campaigns.items():
+                for campaign in campaigns:
+                    f.write(f"{campaign['campaign_id']}\n")
+    
+    def generate_google_campaigns(self, num_campaigns, start_date):
+        """Generate Google Ads campaigns with various start/end dates"""
+        campaigns = []
         
-        # Campaign start and end dates
-        campaign_start = fake.date_time_between(start_date=start_date, end_date=end_date - datetime.timedelta(days=7))
-        campaign_duration = random.randint(7, 90)  # Between 1 week and 3 months
-        campaign_end = min(campaign_start + datetime.timedelta(days=campaign_duration), end_date)
-        
-        # Basic campaign settings
-        daily_budget = random.randint(5000, 25000)  # In CFA francs (approximately $8-$40)
-        
-        # Generate daily data for this campaign
-        current_date = campaign_start
-        while current_date <= campaign_end:
-            # Adjust budget based on season
-            budget_multiplier = get_budget_multiplier(current_date)
-            daily_budget_adjusted = int(daily_budget * budget_multiplier)
+        for i in range(num_campaigns):
+            # Campaign basics
+            campaign_id = f"GAD-{i+1000}"
+            campaign_theme = random.choice(campaign_themes)
+            campaign_category = random.choice(categories)
+            campaign_name = f"{campaign_theme} - {campaign_category}"
             
-            # Select ad type for this day
-            ad_type = random.choice(platforms["Google"]["ad_types"])
+            # Campaign duration (between 2 weeks and 3 months)
+            duration = random.randint(14, 90)
             
-            # Calculate performance metrics
-            impressions = int(daily_budget_adjusted / platforms["Google"]["avg_cpc"][ad_type] * random.uniform(10, 30))
-            ctr_min, ctr_max = platforms["Google"]["ctr_range"][ad_type]
-            ctr = random.uniform(ctr_min, ctr_max)
-            clicks = int(impressions * ctr)
+            # Some campaigns start before, some after the simulation start
+            days_offset = random.randint(-30, 60)  # -30 to +60 days from start
+            campaign_start = start_date + datetime.timedelta(days=days_offset)
+            campaign_end = campaign_start + datetime.timedelta(days=duration)
             
-            # Sometimes there are days with technical issues or paused campaigns
-            if random.random() < 0.05:  # 5% chance of abnormal day
-                impressions = int(impressions * random.uniform(0.1, 0.5))
-                clicks = int(impressions * ctr)
+            # Campaign budget (higher for seasonal campaigns)
+            is_seasonal = campaign_theme in ["Promo Ramadan", "Spécial Tabaski", "Coffrets Cadeaux"]
+            daily_budget = random.randint(8000, 25000) * (1.5 if is_seasonal else 1.0)
             
-            # Cost and conversions
-            avg_cpc = platforms["Google"]["avg_cpc"][ad_type] * random.uniform(0.8, 1.2)  # Some variation
-            cost = clicks * avg_cpc
+            # Campaign targeting
+            target_audience = random.choice(audiences)
             
-            # Conversion metrics
-            conv_rate_min, conv_rate_max = platforms["Google"]["conversion_rate_range"][ad_type]
-            conversion_rate = random.uniform(conv_rate_min, conv_rate_max)
-            conversions = int(clicks * conversion_rate)
-            avg_order_value = random.uniform(8000, 20000)  # In CFA francs
-            conversion_value = conversions * avg_order_value
-            
-            # Select keywords used for this day (3-5 keywords)
-            daily_keywords = random.sample(keywords, random.randint(3, 5))
-            
-            # Create record for this day
-            record = {
-                "date": current_date.strftime("%Y-%m-%d"),
+            campaign = {
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
                 "platform": "Google",
-                "campaign_id": campaign_id,
-                "campaign_name": campaign_name,
-                "ad_type": ad_type,
-                "keywords": "|".join(daily_keywords),
-                "impressions": impressions,
-                "clicks": clicks,
-                "ctr": ctr,
-                "avg_cpc": avg_cpc,
-                "cost": cost,
-                "conversions": conversions,
-                "conversion_rate": conversion_rate,
-                "conversion_value": conversion_value,
-                "target_audience": random.choice(audiences),
-                "category": random.choice(categories)
+                "start_date": campaign_start,
+                "end_date": campaign_end,
+                "daily_budget": daily_budget,
+                "target_audience": target_audience,
+                "category": campaign_category,
+                "performance_curve": self.generate_performance_curve(duration)
             }
             
-            ads_data.append(record)
-            
-            # Move to next day
-            current_date += datetime.timedelta(days=1)
+            campaigns.append(campaign)
+        
+        return campaigns
     
-    return ads_data
-
-# Generate social media ads data (Facebook, Instagram, etc.)
-def generate_social_media_ads(start_date, end_date, num_campaigns=80):
-    ads_data = []
-    
-    # Social media platform weights
-    platform_weights = {
-        "Facebook": 0.4,
-        "Instagram": 0.35,
-        "WhatsApp": 0.15,
-        "YouTube": 0.1
-    }
-    
-    # Content themes for ads
-    content_themes = [
-        "Témoignage client",
-        "Avant/Après",
-        "Tutoriel beauté",
-        "Ingrédients naturels",
-        "Promotion produit",
-        "Tendance beauté",
-        "Conseils d'experts",
-        "Style de vie",
-        "Événement spécial",
-        "Collaboration influenceur"
-    ]
-    
-    # Create campaigns across different platforms
-    for i in range(num_campaigns):
-        # Select platform
-        platform = random.choices(
-            list(platform_weights.keys()),
-            weights=list(platform_weights.values())
-        )[0]
+    def generate_social_campaigns(self, num_campaigns, start_date):
+        """Generate social media campaigns"""
+        campaigns = []
         
-        campaign_id = f"{platform[:2].upper()}-{i+2000}"
+        platforms = ["Facebook", "Instagram", "WhatsApp", "TikTok"]
+        platform_weights = [0.4, 0.3, 0.2, 0.1]
         
-        # Campaign theme and creative
-        theme = random.choice(campaign_themes)
-        content = random.choice(content_themes)
-        campaign_name = f"{theme} - {content}"
-        
-        # Campaign dates
-        campaign_start = fake.date_time_between(start_date=start_date, end_date=end_date - datetime.timedelta(days=7))
-        campaign_duration = random.randint(7, 60)  # Between 1 week and 2 months
-        campaign_end = min(campaign_start + datetime.timedelta(days=campaign_duration), end_date)
-        
-        # Basic campaign settings
-        daily_budget = random.randint(3000, 20000)  # In CFA francs
-        
-        # Target audience
-        audience = random.choice(audiences)
-        
-        # Generate daily data
-        current_date = campaign_start
-        while current_date <= campaign_end:
-            # Weekend vs weekday effect
-            is_weekend = current_date.weekday() >= 5  # 5=Saturday, 6=Sunday
-            weekend_multiplier = 0.8 if is_weekend else 1.1  # Lower engagement on weekends in some markets
+        for i in range(num_campaigns):
+            # Platform selection
+            platform = random.choices(platforms, weights=platform_weights)[0]
             
-            # Select ad type for this day
-            ad_type = random.choice(platforms[platform]["ad_types"])
+            # Campaign basics
+            campaign_id = f"{platform[:2].upper()}-{i+2000}"
+            campaign_theme = random.choice(campaign_themes)
+            campaign_category = random.choice(categories)
+            campaign_name = f"{campaign_theme} - {campaign_category}"
             
-            # Performance metrics with more realistic patterns
-            impressions_base = int(daily_budget / platforms[platform]["avg_cpc"][ad_type] * random.uniform(15, 40))
+            # Campaign duration (social campaigns are typically shorter)
+            duration = random.randint(7, 60)
             
-            # Campaign fatigue effect (performance drops over time)
-            days_running = (current_date - campaign_start).days + 1
-            fatigue_factor = max(0.7, 1 - (days_running / campaign_duration) * 0.4)
+            # Staggered campaign starts
+            days_offset = random.randint(-20, 70)
+            campaign_start = start_date + datetime.timedelta(days=days_offset)
+            campaign_end = campaign_start + datetime.timedelta(days=duration)
             
-            # Apply various factors
-            impressions = int(impressions_base * weekend_multiplier * fatigue_factor)
+            # Campaign budget varies by platform
+            if platform == "Facebook":
+                daily_budget = random.randint(5000, 20000)
+            elif platform == "Instagram":
+                daily_budget = random.randint(6000, 22000)
+            elif platform == "TikTok":
+                daily_budget = random.randint(8000, 25000)
+            else:  # WhatsApp
+                daily_budget = random.randint(3000, 12000)
             
-            # CTR with natural variation
-            ctr_min, ctr_max = platforms[platform]["ctr_range"][ad_type]
+            # Campaign targeting
+            target_audience = random.choice(audiences)
             
-            # More variation based on time factors
-            hour_variation = random.uniform(0.9, 1.1)  # Time of day effect
-            ctr_base = random.uniform(ctr_min, ctr_max)
-            ctr = ctr_base * weekend_multiplier * fatigue_factor * hour_variation
-            
-            # Derived metrics
-            clicks = int(impressions * ctr)
-            
-            # Cost calculation
-            avg_cpc = platforms[platform]["avg_cpc"][ad_type] * random.uniform(0.85, 1.15)
-            cost = clicks * avg_cpc
-            
-            # Engagement metrics specific to social media
-            engagement_rate = ctr * random.uniform(1.5, 3)  # Higher than CTR
-            engagements = int(impressions * engagement_rate)
-            
-            likes = int(engagements * random.uniform(0.4, 0.6))
-            comments = int(engagements * random.uniform(0.05, 0.15))
-            shares = int(engagements * random.uniform(0.01, 0.1))
-            
-            # Conversion metrics
-            conv_rate_min, conv_rate_max = platforms[platform]["conversion_rate_range"][ad_type]
-            conversion_rate = random.uniform(conv_rate_min, conv_rate_max) * fatigue_factor
-            conversions = int(clicks * conversion_rate)
-            avg_order_value = random.uniform(7500, 18000)
-            conversion_value = conversions * avg_order_value
-            
-            # Create record
-            record = {
-                "date": current_date.strftime("%Y-%m-%d"),
+            campaign = {
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
                 "platform": platform,
-                "campaign_id": campaign_id,
-                "campaign_name": campaign_name,
-                "ad_type": ad_type,
-                "content_theme": content,
-                "impressions": impressions,
-                "clicks": clicks,
-                "ctr": ctr,
-                "avg_cpc": avg_cpc,
-                "cost": cost,
-                "engagements": engagements,
-                "likes": likes,
-                "comments": comments,
-                "shares": shares,
-                "conversions": conversions,
-                "conversion_rate": conversion_rate,
-                "conversion_value": conversion_value,
-                "target_audience": audience,
-                "category": random.choice(categories)
+                "start_date": campaign_start,
+                "end_date": campaign_end,
+                "daily_budget": daily_budget,
+                "target_audience": target_audience,
+                "category": campaign_category,
+                "content_theme": random.choice(["Témoignage", "Tutoriel", "Promotionnel", "Lifestyle"]),
+                "performance_curve": self.generate_performance_curve(duration)
             }
             
-            ads_data.append(record)
+            campaigns.append(campaign)
+        
+        return campaigns
+    
+    def generate_influencer_campaigns(self, num_campaigns, start_date):
+        """Generate influencer marketing campaigns"""
+        campaigns = []
+        
+        # First generate influencers
+        influencers = []
+        for i in range(15):  # Pool of 15 influencers
+            tier = random.choices(["Micro", "Mid", "Macro"], weights=[0.6, 0.3, 0.1])[0]
             
-            # Move to next day
-            current_date += datetime.timedelta(days=1)
-    
-    return ads_data
-
-# Generate influencer marketing data
-def generate_influencer_data(start_date, end_date, num_influencers=30):
-    influencer_data = []
-    
-    # Influencer tiers
-    tiers = {
-        "Micro": {"followers_range": (5000, 20000), "fee_range": (50000, 200000), "engagement_range": (0.03, 0.06)},
-        "Mid": {"followers_range": (20001, 100000), "fee_range": (200001, 500000), "engagement_range": (0.02, 0.045)},
-        "Macro": {"followers_range": (100001, 500000), "fee_range": (500001, 1500000), "engagement_range": (0.015, 0.03)}
-    }
-    
-    # Social platforms for influencers
-    platforms = ["Instagram", "TikTok", "YouTube", "Facebook"]
-    
-    # Common Senegalese influencer niches
-    niches = ["Beauté", "Mode", "Style de vie", "Bien-être", "Cuisine", "Voyage"]
-    
-    # Influencer profiles
-    influencers = []
-    for i in range(num_influencers):
-        # Select tier
-        tier = random.choices(list(tiers.keys()), weights=[0.6, 0.3, 0.1])[0]
+            if tier == "Micro":
+                followers = random.randint(5000, 20000)
+                engagement_rate = random.uniform(0.03, 0.06)
+                base_fee = random.randint(50000, 200000)
+            elif tier == "Mid":
+                followers = random.randint(20001, 100000)
+                engagement_rate = random.uniform(0.02, 0.045)
+                base_fee = random.randint(200001, 500000)
+            else:  # Macro
+                followers = random.randint(100001, 500000)
+                engagement_rate = random.uniform(0.015, 0.03)
+                base_fee = random.randint(500001, 1500000)
+                
+            influencer = {
+                "influencer_id": f"INF-{i+100}",
+                "name": self.generate_senegalese_name(),
+                "tier": tier,
+                "followers": followers,
+                "platform": random.choice(["Instagram", "TikTok", "YouTube"]),
+                "engagement_rate": engagement_rate,
+                "base_fee": base_fee
+            }
+            
+            influencers.append(influencer)
         
-        # Basic profile
-        followers_min, followers_max = tiers[tier]["followers_range"]
-        followers = random.randint(followers_min, followers_max)
-        
-        fee_min, fee_max = tiers[tier]["fee_range"]
-        base_fee = random.randint(fee_min, fee_max)
-        
-        engagement_min, engagement_max = tiers[tier]["engagement_range"]
-        avg_engagement = random.uniform(engagement_min, engagement_max)
-        
-        # Platform and niche
-        primary_platform = random.choice(platforms)
-        niche = random.choice(niches)
-        
-        # Region of influence (Senegal specific)
-        if random.random() < 0.6:  # 60% Dakar-based
-            region = "Dakar"
-        else:
-            region = random.choice(["Thiès", "Saint-Louis", "Touba", "Diaspora"])
-        
-        # Language used
-        language = random.choices(["Français", "Wolof", "Français/Wolof"], weights=[0.3, 0.2, 0.5])[0]
-        
-        influencer = {
-            "influencer_id": f"INF-{i+100}",
-            "name": generate_senegalese_name(),  # Utilisation de noms sénégalais
-            "tier": tier,
-            "followers": followers,
-            "primary_platform": primary_platform,
-            "niche": niche,
-            "region": region,
-            "language": language,
-            "base_fee": base_fee,
-            "avg_engagement_rate": avg_engagement
-        }
-        
-        influencers.append(influencer)
-    
-    # Generate campaigns with influencers
-    campaigns = []
-    
-    for i in range(num_influencers * 2):  # Each influencer does about 2 campaigns on average
-        campaign_id = f"INF-CAMP-{i+500}"
-        campaign_name = f"{random.choice(campaign_themes)} - {random.choice(['Lancement', 'Promotion', 'Branding'])}"
-        
-        # Campaign dates
-        campaign_start = fake.date_time_between(start_date=start_date, end_date=end_date - datetime.timedelta(days=30))
-        campaign_duration = random.randint(7, 30)  # 1 week to 1 month
-        campaign_end = min(campaign_start + datetime.timedelta(days=campaign_duration), end_date)
-        
-        # Select random influencer
-        influencer = random.choice(influencers)
-        
-        # Content types
-        content_types = {
-            "Instagram": ["Post", "Story", "Reel"],
-            "TikTok": ["Video"],
-            "YouTube": ["Video", "Short"],
-            "Facebook": ["Post", "Live"]
-        }
-        
-        # Products featured
-        products_featured = random.sample([
-            "Sérum au Karité",
-            "Crème au Baobab",
-            "Huile de Ricin",
-            "Beurre de Karité",
-            "Masque à l'Argile",
-            "Fond de Teint Naturel",
-            "Parfum à l'Hibiscus"
-        ], random.randint(1, 3))
-        
-        # Promo code
-        promo_code = f"{influencer['name'].split()[0].upper()}{random.randint(10, 30)}"
-        
-        # Performance metrics
-        content_type = random.choice(content_types[influencer["primary_platform"]])
-        
-        # Base metrics
-        impressions = int(influencer["followers"] * random.uniform(0.6, 1.2))  # Reach can be more or less than followers
-        engagement_rate = influencer["avg_engagement_rate"] * random.uniform(0.8, 1.2)  # Variation
-        engagements = int(impressions * engagement_rate)
-        
-        # Click metrics
-        ctr = random.uniform(0.01, 0.05)  # Click-through rate to e-commerce
-        clicks = int(impressions * ctr)
-        
-        # Conversion metrics
-        conversion_rate = random.uniform(0.01, 0.04)
-        conversions = int(clicks * conversion_rate)
-        avg_order_value = random.uniform(8000, 15000)
-        conversion_value = conversions * avg_order_value
-        
-        # ROI calculation
-        cost = influencer["base_fee"] * random.uniform(0.9, 1.1)  # Some negotiation
-        roi = (conversion_value - cost) / cost if cost > 0 else 0
-        
-        campaign = {
-            "campaign_id": campaign_id,
-            "campaign_name": campaign_name,
-            "start_date": campaign_start.strftime("%Y-%m-%d"),
-            "end_date": campaign_end.strftime("%Y-%m-%d"),
-            "influencer_id": influencer["influencer_id"],
-            "influencer_name": influencer["name"],
-            "platform": influencer["primary_platform"],
-            "content_type": content_type,
-            "products_featured": "|".join(products_featured),
-            "promo_code": promo_code,
-            "impressions": impressions,
-            "engagements": engagements,
-            "engagement_rate": engagement_rate,
-            "clicks": clicks,
-            "ctr": ctr,
-            "conversions": conversions,
-            "conversion_rate": conversion_rate,
-            "conversion_value": conversion_value,
-            "cost": cost,
-            "roi": roi,
-            "category": random.choice(categories)
-        }
-        
-        campaigns.append(campaign)
-    
-    return influencers, campaigns
-
-# Generate all advertising data
-print("Generating Google Ads data...")
-google_ads_data = generate_google_ads(start_date, end_date, num_campaigns=50)
-google_ads_df = pd.DataFrame(google_ads_data)
-
-print("Generating social media ads data...")
-social_ads_data = generate_social_media_ads(start_date, end_date, num_campaigns=80)
-social_ads_df = pd.DataFrame(social_ads_data)
-
-print("Generating influencer marketing data...")
-influencers_data, campaigns_data = generate_influencer_data(start_date, end_date, num_influencers=30)
-influencers_df = pd.DataFrame(influencers_data)
-campaigns_df = pd.DataFrame(campaigns_data)
-
-# Save all data
-google_ads_df.to_csv(os.path.join(output_dir, 'google_ads.csv'), index=False)
-social_ads_df.to_csv(os.path.join(output_dir, 'social_ads.csv'), index=False)
-influencers_df.to_csv(os.path.join(output_dir, 'influencers.csv'), index=False)
-campaigns_df.to_csv(os.path.join(output_dir, 'influencer_campaigns.csv'), index=False)
-
-# Combine all platform data for an integrated view
-all_platform_data = []
-
-# Process Google Ads data
-for _, row in google_ads_df.iterrows():
-    all_platform_data.append({
-        "date": row["date"],
-        "platform": row["platform"],
-        "campaign_id": row["campaign_id"],
-        "campaign_name": row["campaign_name"],
-        "ad_type": row["ad_type"],
-        "impressions": row["impressions"],
-        "clicks": row["clicks"],
-        "cost": row["cost"],
-        "conversions": row["conversions"],
-        "conversion_value": row["conversion_value"],
-        "target_audience": row["target_audience"],
-        "category": row["category"]
-    })
-
-# Process Social Media Ads data
-for _, row in social_ads_df.iterrows():
-    all_platform_data.append({
-        "date": row["date"],
-        "platform": row["platform"],
-        "campaign_id": row["campaign_id"],
-        "campaign_name": row["campaign_name"],
-        "ad_type": row["ad_type"],
-        "impressions": row["impressions"],
-        "clicks": row["clicks"],
-        "cost": row["cost"],
-        "conversions": row["conversions"],
-        "conversion_value": row["conversion_value"],
-        "target_audience": row["target_audience"],
-        "category": row["category"] if "category" in row else None
-    })
-
-# Process Influencer data (aggregated to daily level)
-for _, campaign in campaigns_df.iterrows():
-    # Convert campaign period to daily entries
-    start = datetime.datetime.strptime(campaign["start_date"], "%Y-%m-%d")
-    end = datetime.datetime.strptime(campaign["end_date"], "%Y-%m-%d")
-    
-    # Calculate daily metrics (simplified by dividing evenly across days)
-    days = (end - start).days + 1
-    
-    # Only add if days is positive
-    if days > 0:
-        daily_impressions = int(campaign["impressions"] / days)
-        daily_clicks = int(campaign["clicks"] / days)
-        daily_cost = campaign["cost"] / days
-        daily_conversions = int(campaign["conversions"] / days)
-        daily_conversion_value = campaign["conversion_value"] / days
-        
-        current_date = start
-        while current_date <= end:
-            all_platform_data.append({
-                "date": current_date.strftime("%Y-%m-%d"),
-                "platform": "Influencer_" + campaign["platform"],
-                "campaign_id": campaign["campaign_id"],
-                "campaign_name": campaign["campaign_name"],
-                "ad_type": campaign["content_type"],
-                "impressions": daily_impressions,
-                "clicks": daily_clicks,
-                "cost": daily_cost,
-                "conversions": daily_conversions,
-                "conversion_value": daily_conversion_value,
+        # Then generate campaigns using these influencers
+        for i in range(num_campaigns):
+            # Select an influencer
+            influencer = random.choice(influencers)
+            
+            # Campaign basics
+            campaign_id = f"INF-CAMP-{i+500}"
+            campaign_theme = random.choice(campaign_themes)
+            campaign_category = random.choice(categories)
+            campaign_name = f"{campaign_theme} - Influencer"
+            
+            # Campaign duration (typically short for influencers)
+            duration = random.randint(7, 30)
+            
+            # Staggered campaign starts
+            days_offset = random.randint(-10, 80)
+            campaign_start = start_date + datetime.timedelta(days=days_offset)
+            campaign_end = campaign_start + datetime.timedelta(days=duration)
+            
+            # Promo code
+            promo_code = f"{influencer['name'].split()[0].upper()}{random.randint(10, 30)}"
+            
+            campaign = {
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
+                "platform": f"Influencer_{influencer['platform']}",
+                "start_date": campaign_start,
+                "end_date": campaign_end,
+                "influencer_id": influencer["influencer_id"],
+                "influencer_name": influencer["name"],
+                "followers": influencer["followers"],
+                "promo_code": promo_code,
+                "content_type": random.choice(["Post", "Story", "Video", "Reel"]),
+                "fee": influencer["base_fee"] * random.uniform(0.9, 1.1),
                 "target_audience": "Followers",
-                "category": campaign["category"] if "category" in campaign else None
-            })
+                "category": campaign_category,
+                "performance_curve": self.generate_performance_curve(duration, is_influencer=True)
+            }
             
-            current_date += datetime.timedelta(days=1)
+            campaigns.append(campaign)
+        
+        return campaigns
+    
+    def generate_performance_curve(self, duration, is_influencer=False):
+        """Generate a performance curve for campaign lifecycle
+        
+        Returns a dictionary with performance multipliers for different phases:
+        - launch: Days 1-3, building momentum
+        - growth: Days 4-10, increasing performance
+        - peak: Middle period, optimal performance
+        - decline: Final period, decreasing performance
+        """
+        # Influencer campaigns have sharper curves (spike and drop)
+        if is_influencer:
+            return {
+                "launch": random.uniform(0.3, 0.5),  # Day 1 performance
+                "growth_rate": random.uniform(1.5, 2.5),  # Daily growth factor
+                "peak_day": min(duration - 1, random.randint(2, 5)),  # Peak performance day
+                "peak_multiplier": random.uniform(1.0, 1.3),  # Peak performance multiplier
+                "decay_rate": random.uniform(0.6, 0.8)  # Daily decay factor after peak
+            }
+        else:
+            return {
+                "launch": random.uniform(0.5, 0.7),  # Day 1 performance
+                "growth_rate": random.uniform(1.1, 1.3),  # Daily growth factor
+                "peak_day": min(duration - 1, random.randint(1, max(2, duration // 2))),  # Peak around middle
+                "peak_multiplier": random.uniform(0.9, 1.1),  # Peak performance multiplier
+                "decay_rate": random.uniform(0.95, 0.98)  # Daily decay factor after peak
+            }
+    
+    def generate_senegalese_name(self):
+        """Generate a random Senegalese name"""
+        first_name = random.choice(senegalese_first_names)
+        last_name = random.choice(senegalese_last_names)
+        return f"{first_name} {last_name}"
+    
+    def generate_time_series(self):
+        """Generate time series data for all campaigns"""
+        if not self.active_campaigns["google"]:
+            # Initialize if not already done
+            self.initialize_campaigns()
+        
+        # Generate snapshots for each date in the range
+        date_range = pd.date_range(start=self.start_date, end=self.end_date, freq=self.freq)
+        
+        # For each date, generate the day's performance data
+        for current_date in tqdm(date_range, desc="Generating advertising time series"):
+            self.current_date = current_date
+            self.update_campaigns_for_date()
+    
+    def update_campaigns_for_date(self):
+        """Update campaign data for the current date"""
+        # Format date for filenames
+        date_str = self.current_date.strftime('%Y%m%d')
+        
+        # 1. Check for campaign starts/ends and create new campaigns
+        self.manage_campaign_lifecycle()
+        
+        # 2. Generate daily performance data for active campaigns
+        google_data = self.generate_daily_google_data()
+        social_data = self.generate_daily_social_data()
+        influencer_data = self.generate_daily_influencer_data()
+        
+        # 3. Save daily snapshots
+        if google_data:
+            df = pd.DataFrame(google_data)
+            df.to_csv(os.path.join(output_dir, f'google_ads_{date_str}.csv'), index=False)
+            
+        if social_data:
+            df = pd.DataFrame(social_data)
+            df.to_csv(os.path.join(output_dir, f'social_ads_{date_str}.csv'), index=False)
+            
+        if influencer_data:
+            df = pd.DataFrame(influencer_data)
+            df.to_csv(os.path.join(output_dir, f'influencer_data_{date_str}.csv'), index=False)
+        
+        # 4. Save combined platform data
+        all_platform_data = []
+        
+        # Process Google Ads data
+        for row in google_data:
+            all_platform_data.append({
+                "date": self.current_date.strftime('%Y-%m-%d'),
+                "platform": "Google",
+                "campaign_id": row["campaign_id"],
+                "campaign_name": row["campaign_name"],
+                "ad_type": row["ad_type"],
+                "impressions": row["impressions"],
+                "clicks": row["clicks"],
+                "cost": row["cost"],
+                "conversions": row["conversions"],
+                "conversion_value": row["conversion_value"],
+                "target_audience": row["target_audience"],
+                "category": row["category"]
+            })
+        
+        # Process Social Media Ads data
+        for row in social_data:
+            all_platform_data.append({
+                "date": self.current_date.strftime('%Y-%m-%d'),
+                "platform": row["platform"],
+                "campaign_id": row["campaign_id"],
+                "campaign_name": row["campaign_name"],
+                "ad_type": row["ad_type"],
+                "impressions": row["impressions"],
+                "clicks": row["clicks"],
+                "cost": row["cost"],
+                "conversions": row["conversions"],
+                "conversion_value": row["conversion_value"],
+                "target_audience": row["target_audience"],
+                "category": row["category"]
+            })
+        
+        # Process Influencer data
+        for row in influencer_data:
+            all_platform_data.append({
+                "date": self.current_date.strftime('%Y-%m-%d'),
+                "platform": f"Influencer_{row['platform']}",
+                "campaign_id": row["campaign_id"],
+                "campaign_name": row["campaign_name"],
+                "ad_type": row["content_type"],
+                "impressions": row["impressions"],
+                "clicks": row["clicks"],
+                "cost": row["fee"] / row["duration"],  # Daily cost
+                "conversions": row["conversions"],
+                "conversion_value": row["conversion_value"],
+                "target_audience": "Followers",
+                "category": row["category"]
+            })
+        
+        if all_platform_data:
+            df = pd.DataFrame(all_platform_data)
+            df.to_csv(os.path.join(output_dir, f'all_platforms_{date_str}.csv'), index=False)
+            
+            # Also append to cumulative file
+            all_platforms_path = os.path.join(output_dir, 'all_advertising_platforms.csv')
+            if os.path.exists(all_platforms_path):
+                df.to_csv(all_platforms_path, mode='a', header=False, index=False)
+            else:
+                df.to_csv(all_platforms_path, index=False)
+        
+        # Update campaign registry
+        self.update_campaign_registry()
+    
+    def manage_campaign_lifecycle(self):
+        """Manage campaign starts, ends, and create new campaigns"""
+        # Check for campaign ends
+        for platform in self.active_campaigns:
+            active_list = []
+            for campaign in self.active_campaigns[platform]:
+                if campaign["end_date"] >= self.current_date:
+                    active_list.append(campaign)
+            
+            # Replace with filtered list
+            self.active_campaigns[platform] = active_list
+        
+        # Create new campaigns based on probabilistic events
+        # Chance of new campaigns varies by day of week and season
+        day_of_week = self.current_date.weekday()
+        month = self.current_date.month
+        
+        # More campaign launches on Monday/Tuesday
+        if day_of_week < 2:  # Monday or Tuesday
+            new_campaign_chance = 0.3
+        else:
+            new_campaign_chance = 0.1
+        
+        # More campaigns during peak seasons
+        if month in [4, 9, 12]:  # Ramadan, Tabaski, End of year
+            new_campaign_chance *= 2
+        
+        # Create new campaigns with probabilities
+        if random.random() < new_campaign_chance:
+            # Determine which platform gets a new campaign
+            platform_type = random.choices(
+                ["google", "social", "influencer"],
+                weights=[0.3, 0.5, 0.2]
+            )[0]
+            
+            if platform_type == "google":
+                new_campaign = self.generate_google_campaigns(1, self.current_date)[0]
+                self.active_campaigns["google"].append(new_campaign)
+            elif platform_type == "social":
+                new_campaign = self.generate_social_campaigns(1, self.current_date)[0]
+                self.active_campaigns["social"].append(new_campaign)
+            else:
+                new_campaign = self.generate_influencer_campaigns(1, self.current_date)[0]
+                self.active_campaigns["influencer"].append(new_campaign)
+    
+    def generate_daily_google_data(self):
+        """Generate daily performance data for Google campaigns"""
+        daily_data = []
+        
+        for campaign in self.active_campaigns["google"]:
+            # Check if campaign is active for current date
+            if campaign["start_date"] <= self.current_date <= campaign["end_date"]:
+                # Calculate day number in campaign lifecycle
+                campaign_day = (self.current_date - campaign["start_date"]).days + 1
+                campaign_duration = (campaign["end_date"] - campaign["start_date"]).days + 1
+                
+                # Get performance curve parameters
+                curve = campaign["performance_curve"]
+                
+                # Calculate performance multiplier based on day in lifecycle
+                if campaign_day <= curve["peak_day"]:
+                    # Growth phase - exponential growth to peak
+                    performance_multiplier = curve["launch"] * (curve["growth_rate"] ** (campaign_day - 1))
+                else:
+                    # Decay phase - exponential decay from peak
+                    days_after_peak = campaign_day - curve["peak_day"]
+                    peak_performance = curve["launch"] * (curve["growth_rate"] ** (curve["peak_day"] - 1))
+                    performance_multiplier = peak_performance * (curve["decay_rate"] ** days_after_peak)
+                
+                # Adjust for weekday effect
+                weekday = self.current_date.weekday()
+                if weekday >= 5:  # Weekend
+                    weekday_multiplier = 0.7  # Lower performance on weekends for B2B
+                else:
+                    weekday_multiplier = 1.0 + (1 - weekday/5) * 0.1  # Best on Monday, worst on Friday
+                
+                # Generate metrics for each ad type in Google Ads
+                ad_types = ["Search", "Display", "Shopping"]
+                
+                for ad_type in ad_types:
+                    # Base metrics calculation
+                    avg_cpc = platforms["Google"]["avg_cpc"][ad_type] * random.uniform(0.9, 1.1)
+                    daily_budget_adjusted = campaign["daily_budget"] * performance_multiplier * weekday_multiplier
+                    
+                    # Metrics calculation
+                    impressions = int(daily_budget_adjusted / avg_cpc * random.uniform(15, 30))
+                    ctr_min, ctr_max = platforms["Google"]["ctr_range"][ad_type]
+                    ctr = random.uniform(ctr_min, ctr_max) * performance_multiplier
+                    clicks = int(impressions * ctr)
+                    cost = clicks * avg_cpc
+                    
+                    # Conversion metrics
+                    conv_rate_min, conv_rate_max = platforms["Google"]["conversion_rate_range"][ad_type]
+                    conversion_rate = random.uniform(conv_rate_min, conv_rate_max) * performance_multiplier
+                    conversions = int(clicks * conversion_rate)
+                    avg_order_value = random.uniform(8000, 20000)
+                    conversion_value = conversions * avg_order_value
+                    
+                    # Daily record
+                    record = {
+                        "date": self.current_date.strftime("%Y-%m-%d"),
+                        "platform": "Google",
+                        "campaign_id": campaign["campaign_id"],
+                        "campaign_name": campaign["campaign_name"],
+                        "ad_type": ad_type,
+                        "impressions": impressions,
+                        "clicks": clicks,
+                        "ctr": ctr,
+                        "avg_cpc": avg_cpc,
+                        "cost": cost,
+                        "conversions": conversions,
+                        "conversion_rate": conversion_rate,
+                        "conversion_value": conversion_value,
+                        "target_audience": campaign["target_audience"],
+                        "category": campaign["category"],
+                        "campaign_day": campaign_day,
+                        "campaign_duration": campaign_duration
+                    }
+                    
+                    # Add keywords if it's Search
+                    if ad_type == "Search":
+                        keywords = random.sample([
+                            "cosmétiques naturels", "produits bio peau", "soins visage bio",
+                            "karité pur", "huile baobab", "cosmétiques sénégal",
+                            "soins cheveux naturels", "beauté bio afrique"
+                        ], 3)
+                        record["keywords"] = "|".join(keywords)
+                    
+                    daily_data.append(record)
+        
+        return daily_data
+    
+    def generate_daily_social_data(self):
+        """Generate daily performance data for social media campaigns"""
+        daily_data = []
+        
+        for campaign in self.active_campaigns["social"]:
+            # Check if campaign is active for current date
+            if campaign["start_date"] <= self.current_date <= campaign["end_date"]:
+                # Calculate day number in campaign lifecycle
+                campaign_day = (self.current_date - campaign["start_date"]).days + 1
+                campaign_duration = (campaign["end_date"] - campaign["start_date"]).days + 1
+                
+                # Get performance curve parameters
+                curve = campaign["performance_curve"]
+                
+                # Calculate performance multiplier based on day in lifecycle
+                if campaign_day <= curve["peak_day"]:
+                    # Growth phase - exponential growth to peak
+                    performance_multiplier = curve["launch"] * (curve["growth_rate"] ** (campaign_day - 1))
+                else:
+                    # Decay phase - exponential decay from peak
+                    days_after_peak = campaign_day - curve["peak_day"]
+                    peak_performance = curve["launch"] * (curve["growth_rate"] ** (curve["peak_day"] - 1))
+                    performance_multiplier = peak_performance * (curve["decay_rate"] ** days_after_peak)
+                
+                # Adjust for weekday effect (social better on evenings and weekends)
+                weekday = self.current_date.weekday()
+                if weekday >= 5:  # Weekend
+                    weekday_multiplier = 1.2  # Better on weekends for social
+                else:
+                    weekday_multiplier = 0.9 + (weekday/5) * 0.2  # Worst on Monday, better later in week
+                
+                # Get ad types for this platform
+                platform = campaign["platform"]
+                
+                # Handle TikTok which isn't in our platforms dictionary
+                if platform == "TikTok":
+                    ad_types = ["Video"]
+                    avg_cpc_dict = {"Video": 350}
+                    ctr_range_dict = {"Video": (0.03, 0.06)}
+                    conv_rate_range_dict = {"Video": (0.02, 0.04)}
+                else:
+                    ad_types = platforms[platform]["ad_types"]
+                    avg_cpc_dict = platforms[platform]["avg_cpc"]
+                    ctr_range_dict = platforms[platform]["ctr_range"]
+                    conv_rate_range_dict = platforms[platform]["conversion_rate_range"]
+                
+                for ad_type in ad_types:
+                    # Social-specific metrics
+                    avg_cpc = avg_cpc_dict[ad_type] * random.uniform(0.9, 1.1)
+                    daily_budget_adjusted = campaign["daily_budget"] * performance_multiplier * weekday_multiplier
+                    
+                    # Core metrics
+                    impressions = int(daily_budget_adjusted / avg_cpc * random.uniform(20, 40))
+                    ctr_min, ctr_max = ctr_range_dict[ad_type]
+                    ctr = random.uniform(ctr_min, ctr_max) * performance_multiplier
+                    clicks = int(impressions * ctr)
+                    cost = clicks * avg_cpc
+                    
+                    # Social engagement metrics
+                    engagement_rate = ctr * random.uniform(1.5, 3)
+                    engagements = int(impressions * engagement_rate)
+                    likes = int(engagements * random.uniform(0.4, 0.6))
+                    comments = int(engagements * random.uniform(0.05, 0.15))
+                    shares = int(engagements * random.uniform(0.01, 0.1))
+                    
+                    # Conversion metrics
+                    conv_rate_min, conv_rate_max = conv_rate_range_dict[ad_type]
+                    conversion_rate = random.uniform(conv_rate_min, conv_rate_max) * performance_multiplier
+                    conversions = int(clicks * conversion_rate)
+                    avg_order_value = random.uniform(7500, 18000)
+                    conversion_value = conversions * avg_order_value
+                    
+                    # Daily record
+                    record = {
+                        "date": self.current_date.strftime("%Y-%m-%d"),
+                        "platform": platform,
+                        "campaign_id": campaign["campaign_id"],
+                        "campaign_name": campaign["campaign_name"],
+                        "ad_type": ad_type,
+                        "content_theme": campaign["content_theme"],
+                        "impressions": impressions,
+                        "clicks": clicks,
+                        "ctr": ctr,
+                        "avg_cpc": avg_cpc,
+                        "cost": cost,
+                        "engagements": engagements,
+                        "likes": likes,
+                        "comments": comments,
+                        "shares": shares,
+                        "conversions": conversions,
+                        "conversion_rate": conversion_rate,
+                        "conversion_value": conversion_value,
+                        "target_audience": campaign["target_audience"],
+                        "category": campaign["category"],
+                        "campaign_day": campaign_day,
+                        "campaign_duration": campaign_duration
+                    }
+                    
+                    daily_data.append(record)
+        
+        return daily_data
+    
+    def generate_daily_influencer_data(self):
+        """Generate daily performance data for influencer campaigns"""
+        daily_data = []
+        
+        for campaign in self.active_campaigns["influencer"]:
+            if campaign["start_date"] <= self.current_date <= campaign["end_date"]:
+                campaign_day = (self.current_date - campaign["start_date"]).days + 1
+                campaign_duration = (campaign["end_date"] - campaign["start_date"]).days + 1
+                
+                # Influencer curve is more spike-based - big impact on day of post, then quickly drops
+                curve = campaign["performance_curve"]
+                
+                # Performance spike on specific days
+                is_post_day = campaign_day == 1 or campaign_day % 7 == 0  # Post on day 1 and every 7 days
+                
+                if is_post_day:
+                    # Spike day - full performance
+                    performance_multiplier = 1.0
+                else:
+                    # Decay days - performance drops each day after post
+                    days_since_post = campaign_day % 7 if campaign_day % 7 != 0 else 7
+                    performance_multiplier = curve["decay_rate"] ** (days_since_post - 1)
+                
+                # Minimum floor for performance
+                performance_multiplier = max(0.05, performance_multiplier)
+                
+                # Influencer metrics
+                platform = campaign["platform"].replace("Influencer_", "")
+                followers = campaign["followers"]
+                
+                # Reach calculation (not all followers see the post)
+                if platform == "Instagram":
+                    reach_rate = random.uniform(0.2, 0.35)
+                elif platform == "TikTok":
+                    reach_rate = random.uniform(0.1, 0.5)  # More variable on TikTok due to algorithm
+                else:  # YouTube
+                    reach_rate = random.uniform(0.1, 0.2)
+                
+                impressions = int(followers * reach_rate * performance_multiplier)
+                
+                # Engagement rate based on influencer tier and platform
+                if "Micro" in campaign["influencer_id"]:
+                    base_engagement = random.uniform(0.03, 0.06)
+                elif "Mid" in campaign["influencer_id"]:
+                    base_engagement = random.uniform(0.02, 0.045)
+                else:  # Macro
+                    base_engagement = random.uniform(0.015, 0.03)
+                
+                # Engagement metrics
+                engagement_rate = base_engagement * performance_multiplier
+                engagements = int(impressions * engagement_rate)
+                
+                # Click metrics (lower than regular ads)
+                ctr = random.uniform(0.01, 0.04) * performance_multiplier
+                clicks = int(impressions * ctr)
+                
+                # Conversion metrics (better than regular ads due to trust)
+                conversion_rate = random.uniform(0.02, 0.06) * performance_multiplier
+                conversions = int(clicks * conversion_rate)
+                
+                # Value metrics
+                avg_order_value = random.uniform(9000, 18000)  # Higher AOV with influencers
+                conversion_value = conversions * avg_order_value
+                
+                # Create record
+                record = {
+                    "date": self.current_date.strftime("%Y-%m-%d"),
+                    "campaign_id": campaign["campaign_id"],
+                    "campaign_name": campaign["campaign_name"],
+                    "influencer_id": campaign["influencer_id"],
+                    "influencer_name": campaign["influencer_name"],
+                    "platform": platform,
+                    "content_type": campaign["content_type"],
+                    "impressions": impressions,
+                    "engagements": engagements,
+                    "engagement_rate": engagement_rate,
+                    "clicks": clicks,
+                    "ctr": ctr,
+                    "conversions": conversions,
+                    "conversion_rate": conversion_rate,
+                    "conversion_value": conversion_value,
+                    "fee": campaign["fee"],
+                    "duration": campaign_duration,
+                    "promo_code": campaign["promo_code"],
+                    "category": campaign["category"],
+                    "campaign_day": campaign_day,
+                    "is_post_day": is_post_day
+                }
+                
+                daily_data.append(record)
+        
+        return daily_data
 
-# Save combined platform data
-all_platforms_df = pd.DataFrame(all_platform_data)
-all_platforms_df.to_csv(os.path.join(output_dir, 'all_advertising_platforms.csv'), index=False)
 
-print("\nAll advertising data has been generated and saved to CSV files:")
-print(f"  - Google Ads: {len(google_ads_df)} entries")
-print(f"  - Social Media Ads: {len(social_ads_df)} entries")
-print(f"  - Influencers: {len(influencers_df)} influencers")
-print(f"  - Influencer Campaigns: {len(campaigns_df)} campaigns")
-print(f"  - Combined Platform Data: {len(all_platforms_df)} entries")
-
-# Show a sample of the combined data
-print("\nSample of combined advertising data:")
-print(all_platforms_df.head())
+# Main execution
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Generate advertising data with time progression')
+    parser.add_argument('--start-date', default='2025-01-01', help='Start date for data generation (YYYY-MM-DD)')
+    parser.add_argument('--end-date', default='2025-03-28', help='End date for data generation (YYYY-MM-DD)')
+    parser.add_argument('--frequency', choices=['daily', 'weekly', 'monthly'], default='daily', 
+                      help='Frequency of data snapshots')
+    
+    args = parser.parse_args()
+    
+    generator = AdvertisingDataGenerator(
+        start_date=args.start_date,
+        end_date=args.end_date,
+        snapshot_frequency=args.frequency
+    )
+    
+    generator.initialize_campaigns()
+    generator.generate_time_series()
+    
+    print("Advertising data generation complete!")
