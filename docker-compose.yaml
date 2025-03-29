@@ -219,7 +219,7 @@ services:
       networks:
         - data-network
 
-  grafana:
+    grafana:
       image: grafana/grafana:9.4.7
       container_name: grafana
       ports:
@@ -229,6 +229,7 @@ services:
         - GF_SECURITY_ADMIN_PASSWORD=admin
       volumes:
         - grafana-data:/var/lib/grafana
+        - ./docker/grafana/provisioning:/etc/grafana/provisioning
       networks:
         - data-network
 
