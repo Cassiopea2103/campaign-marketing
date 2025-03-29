@@ -209,33 +209,33 @@ services:
 
   # Monitoring stack ( Prometheus, Grafana )
   prometheus:
-      image: prom/prometheus:v2.42.0
-      container_name: prometheus
-      ports:
-        - "9090:9090"
-      volumes:
-        - ./docker/prometheus:/etc/prometheus
-        - prometheus-data:/prometheus
-      networks:
-        - data-network
+    image: prom/prometheus:v2.42.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    networks:
+      - data-network
 
-    grafana:
-      image: grafana/grafana:9.4.7
-      container_name: grafana
-      ports:
-        - "3001:3000"
-      environment:
-        - GF_SECURITY_ADMIN_USER=admin
-        - GF_SECURITY_ADMIN_PASSWORD=admin
-      volumes:
-        - grafana-data:/var/lib/grafana
-        - ./docker/grafana/provisioning:/etc/grafana/provisioning
-      networks:
-        - data-network
+  grafana:
+    image: grafana/grafana:9.4.7
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - data-network
 
   # dbt for data modeling : 
   dbt:
-    image: fishtownanalytics/dbt:1.4.1
+    image: ghcr.io/dbt-labs/dbt-postgres:1.4.1
     container_name: dbt
     volumes:
       - ./src/etl/dbt:/dbt
