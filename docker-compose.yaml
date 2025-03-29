@@ -252,3 +252,6 @@ volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
