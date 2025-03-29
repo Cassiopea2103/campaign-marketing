@@ -2,99 +2,115 @@ from diagrams import Diagram, Cluster, Edge
 from diagrams.onprem.analytics import Spark
 from diagrams.onprem.queue import Kafka
 from diagrams.onprem.container import Docker
-from diagrams.onprem.client import Users
 from diagrams.onprem.workflow import Airflow
 from diagrams.onprem.analytics import Dbt
-from diagrams.custom import Custom
 from diagrams.onprem.monitoring import Grafana, Prometheus
-from diagrams.saas.analytics import Snowflake
-import os
-# Pas d'import de Looker car il n'est pas disponible
+from diagrams.custom import Custom
 
-# Définition des icônes personnalisées
-ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "./icons/")
+import os 
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+icons_dir = os.path.join(current_dir, "icons")
+os.makedirs(icons_dir, exist_ok=True)
 
-# Pour créer le diagramme
-with Diagram("Architecture E-commerce Cosmétiques Bio", show=False, direction="LR", filename="ecommerce_architecture"):
-    
-    # Sources de données
-    with Cluster("Data source"):
-        with Cluster("CRM"):
-            crm_customers = Custom("customers", ICONS_DIR + "csv.png")
-            crm_orders = Custom("orders", ICONS_DIR + "csv.png")
+# Function to create the architecture diagram
+def create_architecture_diagram():
+    with Diagram("Optimized Architecture - E-commerce Cosmétiques Bio", show=True, direction="LR"):
         
-        with Cluster("Advertising"):
-            ads_google = Custom("Google ads", ICONS_DIR + "csv.png")
-            ads_social = Custom("Social ads", ICONS_DIR + "csv.png")
-            ads_influencers = Custom("Influencers data", ICONS_DIR + "csv.png")
+        # Orchestration
+        with Cluster("Orchestration"):
+            airflow = Airflow("Airflow")
         
-        with Cluster("Web logs"):
-            web_logs = Custom("Web logs", ICONS_DIR + "csv.png")
-            web_json = Custom("Web logs", ICONS_DIR + "json.png")
-    
-    # Orchestration
-    airflow = Airflow("Airflow")
-    
-    # Stockage temporaire
-    with Cluster("Processing"):
-        # Ingestion des données
-        with Cluster("Data ingestion"):
-            kafka = Kafka("Kafka")
+        # Data Sources
+        with Cluster("Data Sources"):
+            # Streaming Data Source
+            with Cluster("Streaming Data"):
+                web_logs = Custom("Web Logs (JSON)", "./icons/json.png")
             
-            # Connexion sources de données vers Kafka
-            crm_customers >> Edge(label="CRM TOPIC") >> kafka
-            crm_orders >> kafka
-            ads_google >> Edge(label="ADV TOPIC") >> kafka
-            ads_social >> kafka
-            ads_influencers >> kafka
-            web_logs >> Edge(label="LOGS TOPIC") >> kafka
-            web_json >> kafka
+            # Batch Data Sources
+            with Cluster("Batch Data"):
+                crm_customers = Custom("CRM - Customers (CSV)", "./icons/csv.png")
+                crm_orders = Custom("CRM - Orders (CSV)", "./icons/csv.png")
+                ads_google = Custom("Google Ads (CSV)", "./icons/csv.png")
+                ads_social = Custom("Social Media Ads (CSV)", "./icons/csv.png")
+                ads_influencers = Custom("Influencer Data (CSV)", "./icons/csv.png")
         
-        # Traitement
-        spark_batch = Spark("Spark\nBatch")
-        spark_streaming = Spark("Spark\nStreaming")
-        
-        # Connexion Kafka vers Spark
-        kafka >> spark_batch
-        kafka >> spark_streaming
-    
-    # Stockage
-    with Cluster("Data storage"):
-        # Data Lake et Data Warehouse
-        with Cluster(""):
-            raw = Custom("raw", ICONS_DIR + "database.png")
-            staging = Custom("staging", ICONS_DIR + "database.png")
-            curated = Custom("curated business data", ICONS_DIR + "database.png")
+        # Processing Layer
+        with Cluster("Processing Layer"):
+            # Streaming Path
+            with Cluster("Streaming Path"):
+                kafka = Kafka("Kafka")
+                spark_streaming = Spark("Spark Streaming")
             
-            raw - Edge(label="Continual improvements") >> staging >> curated
+            # Batch Path
+            with Cluster("Batch Path"):
+                spark_batch = Spark("Spark Batch")
         
-        # Transformation des données
-        dbt = Dbt("dbt")
-        staging >> dbt
+        # Storage Layer
+        with Cluster("Data Storage"):
+            # Data Lake (MinIO)
+            with Cluster("Data Lake (MinIO)"):
+                minio = Custom("MinIO Object Storage", "./icons/minio.png")
+                
+                # Data Zones with borders
+                with Cluster("Bronze Zone"):
+                    bronze = Custom("Raw Data", "./icons/database.png")
+                
+                with Cluster("Silver Zone"):
+                    silver = Custom("Cleaned Data", "./icons/database.png")
+                
+                with Cluster("Gold Zone"):
+                    gold = Custom("Business-Ready Data", "./icons/database.png")
+            
+            # Data Warehouse
+            with Cluster("Data Warehouse"):
+                dbt = Dbt("dbt\n(Data Modeling)")
+                snowflake = Custom("Snowflake", "./icons/snowflake.png")
         
-        # Entrepôt de données
-        snowflake = Snowflake("Snowflake")
-        dbt >> snowflake
-    
-    # Containerisation
-    docker = Docker("Docker")
-    
-    # Monitoring
-    with Cluster("Monitoring & Alerting"):
-        prometheus = Prometheus("Prometheus")
-        grafana = Grafana("Grafana")
+        # Visualization Layer
+        with Cluster("Analytics & Visualization"):
+            metabase = Custom("Metabase", "./icons/metabase.png")
+        
+        # Monitoring
+        with Cluster("Monitoring"):
+            prometheus = Prometheus("Prometheus")
+            grafana = Grafana("Grafana")
+        
+        # Container Management
+        docker = Docker("Docker")
+        
+        # Connect streaming data flow
+        web_logs >> kafka >> spark_streaming >> minio
+        minio >> bronze
+        
+        # Connect batch data flow
+        crm_customers >> spark_batch
+        crm_orders >> spark_batch
+        ads_google >> spark_batch
+        ads_social >> spark_batch
+        ads_influencers >> spark_batch
+        spark_batch >> minio
+        
+        # Data flow through storage layers
+        bronze >> silver >> gold
+        
+        # Connect to data warehouse
+        gold >> dbt >> snowflake >> metabase
+        
+        # Connections to monitoring
+        kafka >> prometheus
+        spark_streaming >> prometheus
+        spark_batch >> prometheus
+        
+        # Orchestration
+        airflow >> kafka
+        airflow >> spark_batch
+        airflow >> spark_streaming
+        airflow >> dbt
+        
+        # Monitoring connections
         prometheus >> grafana
-    
-    # Visualisation des données (avec une icône personnalisée au lieu de Looker)
-    looker = Custom("Looker", ICONS_DIR + "looker.png")
-    
-    # Connexions finales
-    snowflake >> looker
-    [spark_batch, spark_streaming] >> raw
-    
-    # Monitoring connections
-    [kafka, spark_batch, spark_streaming, airflow] >> prometheus
-    
-    # Orchestration connections
-    airflow >> [kafka, spark_batch, spark_streaming, dbt]
+
+# If running this script directly
+if __name__ == "__main__":
+    create_architecture_diagram()
