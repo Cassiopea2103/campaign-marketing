@@ -69,7 +69,7 @@ Le tout est déployé dans un environnement conteneurisé avec Docker pour assur
 
 ### Architecture diagram
 
-![ecommerce_architecture](https://github.com/user-attachments/assets/0cf3f363-f6d3-47f5-bde1-f4b1c9f9a7de)
+![system_architecture](https://github.com/user-attachments/assets/bd8e66f0-697e-4249-8ad4-2cf674b90779)
 
 
 *Architecture diagram showing the data flow from source systems through processing to analytics*
