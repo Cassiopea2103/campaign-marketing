@@ -14,19 +14,56 @@ Ce projet vise à améliorer le retour sur investissement (ROI) des campagnes ma
 
 Ce projet utilise une architecture moderne de data engineering basée sur le modèle Lambda (traitement batch et temps réel) avec les composants suivants:
 
-### Composants principaux:
-- **Sources de données**: Logs web (CSV/JSON), Base CRM, Données publicitaires (Google, Facebook, Instagram)
-- **Ingestion**: Apache Kafka pour l'intégration des données en temps réel
-- **Orchestration**: Apache Airflow pour la gestion et la planification des workflows
-- **Traitement**: 
-  - Apache Spark Batch pour le traitement des lots de données
-  - Apache Spark Streaming pour le traitement en temps réel
-- **Stockage**:
-  - Data Lake (Bronze/Silver/Gold) pour les données brutes et transformées
-  - Snowflake comme data warehouse analytique
-  - dbt pour la modélisation des données
-- **Visualisation**: Tableau/Looker pour les tableaux de bord analytiques
-- **Monitoring**: Prometheus et Grafana pour la surveillance des pipelines
+### 📊 Flux de Données
+
+#### ⭐ Streaming Data Path (Logs Web)
+
+- **Flux** : Logs Web → Kafka → Spark Streaming → Data Lake  
+- **Objectif** : Optimisé pour le traitement des événements en temps réel  
+- **Avantages** : Exploite les capacités de streaming de Kafka pour gérer des événements à haut débit  
+
+#### ⭐ Batch Data Path (CRM & Publicités)
+
+- **Flux** : Données CRM/Publicités → Spark Batch → Data Lake  
+- **Objectif** : Ingestion directe dans Spark pour un traitement en lot  
+- **Avantages** : Évite l'utilisation inutile de Kafka pour des chargements de données périodiques  
+
+---
+
+### 🛠️ Composants de l'architecture
+
+#### 🔹 Sources de données
+
+- **Logs Web** : Événements de comportement utilisateur, pages vues, conversions  
+- **Données CRM** : Profils clients, historique des commandes  
+- **Données Publicitaires** : Performance des campagnes, dépenses, impressions  
+
+#### 🔹 Couche de Traitement
+
+- **Kafka** : Broker de messages en temps réel gérant les données de streaming  
+- **Spark Streaming** : Traitement des événements en temps réel depuis Kafka  
+- **Spark Batch** : Traitement périodique des données CRM et publicitaires  
+
+#### 🔹 Couche de Stockage
+
+- **MinIO** : Stockage objet servant de Data Lake  
+  - **Zone Bronze** : Données brutes non modifiées (JSON, CSV)  
+  - **Zone Silver** : Données nettoyées et validées  
+  - **Zone Gold** : Données agrégées prêtes pour l'analyse  
+
+#### 🔹 Data Warehouse
+
+- **dbt** : Modélisation et transformation des données  
+- **Snowflake** : Exécution de requêtes analytiques et Business Intelligence  
+
+#### 🔹 Analytique & Visualisation
+
+- **Metabase** : Tableaux de bord interactifs et reporting  
+
+#### 🔹 Orchestration & Monitoring
+
+- **Airflow** : Ordonnancement et orchestration des pipelines de données  
+- **Prometheus/Grafana** : Surveillance des performances système et qualité des données  
 
 Le tout est déployé dans un environnement conteneurisé avec Docker pour assurer la portabilité et la reproductibilité.
 
@@ -49,7 +86,7 @@ pip install diagrams
 python docs/architecture/diagram_code.py
 ```
 
-Le diagramme sera généré dans le répertoire `docs/architecture/` avec le nom `ecommerce_architecture.png`.
+Le diagramme sera généré dans le répertoire `docs/architecture/` avec le nom `system_architecture.png`.
 
 ## 📋 Structure du projet
 

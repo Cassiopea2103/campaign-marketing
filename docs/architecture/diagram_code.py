@@ -3,19 +3,19 @@ from diagrams.onprem.analytics import Spark
 from diagrams.onprem.queue import Kafka
 from diagrams.onprem.container import Docker
 from diagrams.onprem.workflow import Airflow
-from diagrams.onprem.analytics import Dbt
+from diagrams.onprem.analytics import Dbt, Metabase 
+from diagrams.saas.analytics import Snowflake
 from diagrams.onprem.monitoring import Grafana, Prometheus
 from diagrams.custom import Custom
 
 import os 
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-icons_dir = os.path.join(current_dir, "icons")
-os.makedirs(icons_dir, exist_ok=True)
+ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "./icons/")
+
 
 # Function to create the architecture diagram
 def create_architecture_diagram():
-    with Diagram("Optimized Architecture - E-commerce Cosmétiques Bio", show=True, direction="LR"):
+    with Diagram("System architecture", show=True, direction="LR"):
         
         # Orchestration
         with Cluster("Orchestration"):
@@ -25,15 +25,15 @@ def create_architecture_diagram():
         with Cluster("Data Sources"):
             # Streaming Data Source
             with Cluster("Streaming Data"):
-                web_logs = Custom("Web Logs (JSON)", "./icons/json.png")
-            
+                web_json = Custom("Web logs (JSON)", ICONS_DIR + "json.png")  
+
             # Batch Data Sources
             with Cluster("Batch Data"):
-                crm_customers = Custom("CRM - Customers (CSV)", "./icons/csv.png")
-                crm_orders = Custom("CRM - Orders (CSV)", "./icons/csv.png")
-                ads_google = Custom("Google Ads (CSV)", "./icons/csv.png")
-                ads_social = Custom("Social Media Ads (CSV)", "./icons/csv.png")
-                ads_influencers = Custom("Influencer Data (CSV)", "./icons/csv.png")
+                crm_customers = Custom("CRM - Customers (CSV)",  ICONS_DIR + "csv.png")
+                crm_orders = Custom("CRM - Orders (CSV)",  ICONS_DIR + "csv.png")
+                ads_google = Custom("Google Ads (CSV)",  ICONS_DIR + "csv.png")
+                ads_social = Custom("Social Media Ads (CSV)",  ICONS_DIR + "csv.png")
+                ads_influencers = Custom("Influencer Data (CSV)",  ICONS_DIR + "csv.png")
         
         # Processing Layer
         with Cluster("Processing Layer"):
@@ -50,26 +50,26 @@ def create_architecture_diagram():
         with Cluster("Data Storage"):
             # Data Lake (MinIO)
             with Cluster("Data Lake (MinIO)"):
-                minio = Custom("MinIO Object Storage", "./icons/minio.png")
+                minio = Custom("MinIO Object Storage", ICONS_DIR + "minio.png")
                 
                 # Data Zones with borders
                 with Cluster("Bronze Zone"):
-                    bronze = Custom("Raw Data", "./icons/database.png")
+                    bronze = Custom("Raw Data",  ICONS_DIR + "datalake_bronze.png")
                 
                 with Cluster("Silver Zone"):
-                    silver = Custom("Cleaned Data", "./icons/database.png")
+                    silver = Custom("Cleaned Data", ICONS_DIR + "datalake_silver.png")
                 
                 with Cluster("Gold Zone"):
-                    gold = Custom("Business-Ready Data", "./icons/database.png")
+                    gold = Custom("Business-Ready Data", ICONS_DIR + "datalake_gold.png")
             
             # Data Warehouse
             with Cluster("Data Warehouse"):
                 dbt = Dbt("dbt\n(Data Modeling)")
-                snowflake = Custom("Snowflake", "./icons/snowflake.png")
+                snowflake = Snowflake("Snowflake")
         
         # Visualization Layer
         with Cluster("Analytics & Visualization"):
-            metabase = Custom("Metabase", "./icons/metabase.png")
+            metabase = Metabase("Metabase")
         
         # Monitoring
         with Cluster("Monitoring"):
@@ -80,7 +80,7 @@ def create_architecture_diagram():
         docker = Docker("Docker")
         
         # Connect streaming data flow
-        web_logs >> kafka >> spark_streaming >> minio
+        web_json >> kafka >> spark_streaming >> minio
         minio >> bronze
         
         # Connect batch data flow
