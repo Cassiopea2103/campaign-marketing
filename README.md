@@ -195,10 +195,10 @@ Les données générées seront stockées dans le dossier `data/raw/` avec la st
 
 ```bash
 # Démarrer tous les services
-docker-compose up -d
+.\init.bat
 
 # Vérifier l'état des conteneurs
-docker-compose ps
+docker ps
 ```
 
 ### 2. Accès aux interfaces utilisateur
