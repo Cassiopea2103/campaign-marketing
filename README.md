@@ -134,8 +134,8 @@ project-root/
 
 1. Cloner le dépôt :
    ```bash
-   git clone https://github.com/votre-username/cosmetics-data-engineering.git
-   cd cosmetics-data-engineering
+   git clone https://github.com/Cassiopea2103/campaign-marketing.git
+   cd campaign-marketing
    ```
 
 2. Installer les dépendances :
