@@ -203,10 +203,13 @@ docker ps
 
 ### 2. Accès aux interfaces utilisateur
 
-- **Airflow**: http://localhost:8080 (utilisateur: airflow, mot de passe: airflow)
-- **Kafka UI**: http://localhost:8081
+- **Airflow**: http://localhost:8088 (utilisateur: admin, mot de passe: admin)
+- **Kafka UI**: http://localhost:9090
+- **Spark UI**: http://localhost:8080
+- **MinIO**: http://localhost:9001 (utilisateur: minioadmin, mot de passe: minioadmin)
 - **Spark UI**: http://localhost:4040
-- **Grafana**: http://localhost:3000 (utilisateur: admin, mot de passe: admin)
+- **Grafana**: http://localhost:3001 (utilisateur: admin, mot de passe: admin)
+- **Metabase**: http://localhost:3000
 
 ### 3. Exécution des pipelines de traitement
 
