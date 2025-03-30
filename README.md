@@ -207,7 +207,6 @@ docker ps
 - **Kafka UI**: http://localhost:9090
 - **Spark UI**: http://localhost:8080
 - **MinIO**: http://localhost:9001 (utilisateur: minioadmin, mot de passe: minioadmin)
-- **Spark UI**: http://localhost:4040
 - **Grafana**: http://localhost:3001 (utilisateur: admin, mot de passe: admin)
 - **Metabase**: http://localhost:3000
 
