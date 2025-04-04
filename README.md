@@ -228,6 +228,155 @@ Une fois les pipelines exécutés, vous pouvez accéder aux tableaux de bord via
 - Le comportement des utilisateurs
 - L'impact des promotions sur les ventes
 
+
+# Pipeline d'Analyse des Campagnes Marketing
+
+Ce répertoire contient l'implémentation du pipeline de données pour l'analyse des performances des campagnes marketing pour l'entreprise e-commerce de cosmétiques biologiques.
+
+## Vue d'ensemble
+
+Le pipeline de données intègre les logs web, les données CRM et les données publicitaires pour fournir des insights complets sur l'efficacité des campagnes marketing, le comportement client et le ROI. Le pipeline suit une architecture Lambda avec des chemins séparés pour les données en streaming et par lots.
+
+## Composants du Pipeline
+
+### Sources de données
+- **Logs Web** : Événements de comportement utilisateur, vues de pages, conversions
+- **Données CRM** : Profils clients, historique des commandes
+- **Données Publicitaires** : Métriques de performance des campagnes Google Ads, réseaux sociaux et influenceurs
+
+### Flux de données
+1. **Couche d'Ingestion** : Les données brutes sont ingérées dans la couche Bronze
+2. **Couche de Transformation** : Les données sont nettoyées et standardisées dans la couche Silver
+3. **Couche d'Agrégation** : Les analyses prêtes à l'emploi sont créées dans la couche Gold
+4. **Couche Entrepôt** : Les données sont chargées dans l'entrepôt de données pour le reporting
+
+### Fonctionnalités clés
+- Modélisation d'attribution multi-touch
+- Segmentation client RFM
+- Analyse des performances marketing
+- Analyse des performances produits
+- Suivi du cycle de vie client
+
+## Structure des répertoires
+
+```
+src/
+├── ingestion/                # Scripts d'ingestion de données
+│   ├── streaming/            # Ingestion de données en streaming (logs web)
+│   │   ├── ingest_web_logs.py
+│   │   └── web_logs_to_bronze.py
+│   └── batch/                # Ingestion de données par lots (CRM, publicité)
+│       ├── crm_to_bronze.py
+│       └── advertising_to_bronze.py
+├── transformation/           # Scripts de transformation de données
+│   ├── clean_web_logs.py
+│   ├── clean_crm_data.py
+│   ├── create_attribution_models.py
+│   ├── marketing_performance.py
+│   └── customer_segments.py
+└── orchestration/            # DAGs Airflow
+    └── dags/
+        ├── data_ingestion_dag.py
+        ├── data_transformation_dag.py
+        ├── data_aggregation_dag.py
+        ├── warehouse_loading_dag.py
+        └── monitoring_dag.py
+```
+
+## Description des DAGs
+
+### DAG d'Ingestion de Données
+S'exécute quotidiennement pour ingérer des données brutes de diverses sources dans la couche Bronze :
+- Vérifie les nouveaux fichiers de logs web et les charge dans Kafka
+- Traite les logs web depuis Kafka vers la couche Bronze
+- Charge les données CRM et publicitaires directement dans la couche Bronze
+
+### DAG de Transformation de Données
+Transforme les données de la couche Bronze vers la couche Silver :
+- Nettoie et standardise les logs web, les données CRM et les données publicitaires
+- Crée des profils clients enrichis
+- Joint les événements web avec les données clients
+- Crée des modèles d'attribution marketing
+
+### DAG d'Agrégation de Données
+Crée des données agrégées prêtes à l'emploi dans la couche Gold :
+- Métriques de performance marketing par canal et campagne
+- Analyses de performance produit
+- Modèles de segmentation client
+- Prévisions et tendances des ventes
+
+### DAG de Chargement de l'Entrepôt
+Charge les données de Gold vers l'entrepôt de données :
+- Exécute les modèles dbt pour l'analyse
+- Crée les tables et vues finales pour le reporting
+- Rafraîchit les tableaux de bord
+
+### DAG de Surveillance
+Surveille la santé du pipeline et la qualité des données :
+- Vérifie la fraîcheur des données
+- Valide l'exhaustivité des données
+- Surveille les métriques d'exécution du pipeline
+- Génère des rapports de qualité des données
+
+## Utilisation
+
+### Prérequis
+- Docker et Docker Compose
+- Python 3.8+
+- Apache Airflow
+- Apache Spark
+- Apache Kafka
+
+### Exécution du Pipeline
+1. Démarrer l'environnement :
+   ```
+   docker-compose up -d
+   ```
+
+2. Accéder à Airflow pour gérer les DAGs :
+   ```
+   http://localhost:8088
+   ```
+
+3. Activer les DAGs dans l'ordre suivant :
+   - `data_ingestion_dag`
+   - `data_transformation_dag`
+   - `data_aggregation_dag`
+   - `warehouse_loading_dag`
+
+## Modèles de Données
+
+### Couche Bronze (Données Brutes)
+- `web_logs` : Événements web bruts du site e-commerce
+- `customers` : Données brutes des profils clients
+- `orders` : Données brutes des commandes
+- `google_ads` : Données brutes des campagnes Google Ads
+- `social_ads` : Données brutes des publicités sur réseaux sociaux
+- `influencer` : Données brutes du marketing d'influence
+
+### Couche Silver (Données Nettoyées)
+- `web_logs` : Données d'événements web nettoyées
+- `web_sessions` : Données de sessions web agrégées
+- `customers` : Profils clients nettoyés
+- `orders` : Données de commandes nettoyées
+- `order_items` : Lignes de commande détaillées
+- `marketing_attribution` : Données d'attribution multi-touch
+- `channel_performance` : Performance des canaux avec attribution
+
+### Couche Gold (Prêt pour l'Analyse)
+- `marketing_performance` : Performance marketing par canal, campagne et période
+- `customer_segments` : Segmentation client pour le marketing ciblé
+- `rfm_segments` : Segmentation RFM (Récence, Fréquence, Montant)
+- `lifecycle_segments` : Données des étapes du cycle de vie client
+
+## Notes d'Implémentation
+
+- Les logs web sont traités via Kafka pour la gestion d'événements en temps réel
+- Les données CRM et publicitaires utilisent un traitement par lots direct
+- Les modèles d'attribution incluent premier contact, dernier contact, linéaire et décroissance temporelle
+- La segmentation client inclut RFM, affinité produit et étapes du cycle de vie
+- La qualité des données est surveillée à chaque étape du pipeline
+
 ## 📋 Backlog et gestion de projet
 
 Le projet est géré en mode agile avec des sprints de 2 semaines. Le backlog du produit est organisé en epics :
