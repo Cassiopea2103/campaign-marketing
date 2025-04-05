@@ -127,7 +127,7 @@ check_advertising_data_task = PythonOperator(
 # Spark jobs for data ingestion
 ingest_web_logs = SparkSubmitOperator(
     task_id='ingest_web_logs_to_kafka',
-    application='/src/etl/ingestion/ingest_web_logs.py',
+    application='/src/ingestion/streaming/ingest_web_logs.py',
     name='web_logs_to_kafka',
     conn_id='spark_default',
     application_args=['{{ ti.xcom_pull(task_ids="check_web_logs") }}'],
@@ -141,7 +141,7 @@ ingest_web_logs = SparkSubmitOperator(
 
 ingest_web_logs_to_bronze = SparkSubmitOperator(
     task_id='ingest_web_logs_to_bronze',
-    application='/src/etl/ingestion/web_logs_to_bronze.py',
+    application='/src/ingestion/streaming/web_logs_to_bronze.py',
     name='web_logs_to_bronze',
     conn_id='spark_default',
     conf={
@@ -154,7 +154,7 @@ ingest_web_logs_to_bronze = SparkSubmitOperator(
 
 ingest_crm_to_bronze = SparkSubmitOperator(
     task_id='ingest_crm_to_bronze',
-    application='/src/etl/ingestion/crm_to_bronze.py',
+    application='/src/ingestion/batch/crm_to_bronze.py',
     name='crm_to_bronze',
     conn_id='spark_default',
     application_args=['{{ ti.xcom_pull(task_ids="check_crm_data") }}'],
@@ -168,7 +168,7 @@ ingest_crm_to_bronze = SparkSubmitOperator(
 
 ingest_advertising_to_bronze = SparkSubmitOperator(
     task_id='ingest_advertising_to_bronze',
-    application='/src/etl/ingestion/advertising_to_bronze.py',
+    application='/src/ingestion/batch/advertising_to_bronze.py',
     name='advertising_to_bronze',
     conn_id='spark_default',
     application_args=['{{ ti.xcom_pull(task_ids="check_advertising_data") }}'],

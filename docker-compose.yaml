@@ -136,6 +136,7 @@ services:
       - ./src/orchestration/plugins:/opt/airflow/plugins
       - ./logs:/opt/airflow/logs
       - ./data:/data
+      - ./src:/src
     ports:
       - "8088:8080"
     command: webserver
@@ -168,6 +169,8 @@ services:
       - ./src/orchestration/plugins:/opt/airflow/plugins
       - ./logs:/opt/airflow/logs
       - ./data:/data
+      - ./src:/src
+
     command: scheduler
     networks:
       - data-network
@@ -265,3 +268,4 @@ volumes:
   minio-data:
   prometheus-data:
   grafana-data:
+  
