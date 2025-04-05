@@ -123,11 +123,12 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
-      - AIRFLOW__CORE__FERNET_KEY=''
+      - AIRFLOW__CORE__FERNET_KEY=j1Wl44yYMIAkmioF4QJcdQapOOaVRkadq8rOOT5USwA=
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - ADDITIONAL_PYTHON_PACKAGES=apache-airflow-providers-apache-spark
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
     volumes:
       - ./src/orchestration/dags:/opt/airflow/dags
       - ./src/orchestration/plugins:/opt/airflow/plugins
@@ -152,9 +153,12 @@ services:
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
-      - AIRFLOW__CORE__FERNET_KEY=''
+      - AIRFLOW__CORE__FERNET_KEY=j1Wl44yYMIAkmioF4QJcdQapOOaVRkadq8rOOT5USwA=
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - ADDITIONAL_PYTHON_PACKAGES=apache-airflow-providers-apache-spark
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
     volumes:
       - ./src/orchestration/dags:/opt/airflow/dags
       - ./src/orchestration/plugins:/opt/airflow/plugins

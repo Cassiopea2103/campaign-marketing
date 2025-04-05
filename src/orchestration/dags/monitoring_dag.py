@@ -95,27 +95,7 @@ generate_quality_report = SparkSubmitOperator(
     dag=dag,
 )
 
-# Set task dependencies
-wait_for_other_dags >> [
-    check_data_freshness,
-    validate_data_quality,
-    check_schema_drift,
-    monitor_pipeline_metrics,
-    check_disk_usage,
-    monitor_kafka_lag,
-    check_data_volumes
-]
 
-# Generate report after all checks complete
-[
-    check_data_freshness,
-    validate_data_quality,
-    check_schema_drift,
-    monitor_pipeline_metrics,
-    check_disk_usage,
-    monitor_kafka_lag,
-    check_data_volumes
-] >> generate_quality_report
 
 # Check overall data freshness
 check_data_freshness = SparkSubmitOperator(
@@ -235,3 +215,25 @@ monitor_pipeline_metrics = PythonOperator(
     provide_context=True,
     dag=dag,
 )
+
+# Set task dependencies
+wait_for_other_dags >> [
+    check_data_freshness,
+    validate_data_quality,
+    check_schema_drift,
+    monitor_pipeline_metrics,
+    check_disk_usage,
+    monitor_kafka_lag,
+    check_data_volumes
+]
+
+# Generate report after all checks complete
+[
+    check_data_freshness,
+    validate_data_quality,
+    check_schema_drift,
+    monitor_pipeline_metrics,
+    check_disk_usage,
+    monitor_kafka_lag,
+    check_data_volumes
+] >> generate_quality_report
