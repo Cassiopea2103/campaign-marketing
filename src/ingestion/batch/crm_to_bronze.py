@@ -16,6 +16,7 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType, I
 import json
 import sys
 import os
+import glob
 from datetime import datetime
 
 # Initialize Spark Session
@@ -136,8 +137,27 @@ def process_crm_data(file_paths):
             file_paths = [file_paths]  # Single file path
     
     if not file_paths:
-        print("No files to process")
-        return
+        # Default to latest files or check for a date range
+        data_dir = "/data/raw/crm"
+        today = datetime.now().strftime("%Y%m%d")
+        
+        # Try today's files
+        today_files = glob.glob(f"{data_dir}/customers_{today}*.csv")
+        today_files += glob.glob(f"{data_dir}/orders_{today}*.csv")
+
+        # If no today files, try any files in the directory
+        if not today_files:
+            all_files = glob.glob(f"{data_dir}/customers_*.csv")
+            all_files += glob.glob(f"{data_dir}/orders_*.csv")
+            
+            if all_files:
+                print(f"No files found for today, using most recent files instead.")
+                file_paths = all_files
+            else:
+                print(f"No CRM files found in the directory")
+                sys.exit(0)
+        else:
+            file_paths = today_files
     
     print(f"Processing {len(file_paths)} files")
     
@@ -184,7 +204,6 @@ if __name__ == "__main__":
         today = datetime.now().strftime("%Y%m%d")
         
         # Find files for today
-        import glob
         file_paths = glob.glob(f"{data_dir}/customers_{today}*.csv")
         file_paths += glob.glob(f"{data_dir}/orders_{today}*.csv")
         
