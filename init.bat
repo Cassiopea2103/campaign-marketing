@@ -68,7 +68,7 @@ docker-compose up -d
 echo.
 echo Initialization complete! Your environment is now ready with:
 echo - Airflow: http://localhost:8088 (user: admin, password: admin)
-echo - Kafka UI: http://localhost:9090 
+echo - Kafka UI: http://localhost:9482 
 echo - MinIO: http://localhost:9001 (user: minioadmin, password: minioadmin)
 echo - Grafana: http://localhost:3001 (user: admin, password: admin)
 echo - Metabase: http://localhost:3000

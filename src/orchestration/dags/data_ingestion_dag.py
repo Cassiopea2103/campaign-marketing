@@ -132,7 +132,6 @@ ingest_web_logs = SparkSubmitOperator(
     conn_id='spark_default',
     application_args=['{{ ti.xcom_pull(task_ids="check_web_logs") }}'],
     conf={
-        'spark.master': 'spark://spark-master:7077',
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
@@ -145,7 +144,6 @@ ingest_web_logs_to_bronze = SparkSubmitOperator(
     name='web_logs_to_bronze',
     conn_id='spark_default',
     conf={
-        'spark.master': 'spark://spark-master:7077',
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
@@ -159,11 +157,11 @@ ingest_crm_to_bronze = SparkSubmitOperator(
     conn_id='spark_default',
     application_args=['{{ ti.xcom_pull(task_ids="check_crm_data") }}'],
     conf={
-        'spark.master': 'spark://spark-master:7077',
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
     dag=dag,
+    
 )
 
 ingest_advertising_to_bronze = SparkSubmitOperator(
@@ -173,11 +171,12 @@ ingest_advertising_to_bronze = SparkSubmitOperator(
     conn_id='spark_default',
     application_args=['{{ ti.xcom_pull(task_ids="check_advertising_data") }}'],
     conf={
-        'spark.master': 'spark://spark-master:7077',
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    
     dag=dag,
+    
 )
 
 # Set task dependencies
