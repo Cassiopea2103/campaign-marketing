@@ -3,6 +3,9 @@ from pyspark.sql import SparkSession
 def main() : 
     spark = SparkSession.builder \
         .appName("Advertising Data to Bronze") \
+        .config("spark.network.timeout", "300s") \
+        .config("spark.executor.heartbeatInterval", "60s") \
+        .master("spark://spark-master:7077") \
         .getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 

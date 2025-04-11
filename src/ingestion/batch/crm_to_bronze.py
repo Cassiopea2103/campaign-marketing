@@ -12,7 +12,7 @@ Usage:
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit, current_timestamp, regexp_replace, when, from_json
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, TimestampType, ArrayType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, TimestampType, ArrayType , BooleanType
 import json
 import sys
 import os
@@ -22,6 +22,12 @@ from datetime import datetime
 # Initialize Spark Session
 spark = SparkSession.builder \
     .appName("CRM Data to Bronze") \
+    .config("spark.network.timeout", "600s") \
+    .config("spark.executor.heartbeatInterval", "120s") \
+    .config("spark.driver.maxResultSize", "2g") \
+    .config("spark.scheduler.mode", "FAIR") \
+    .config("spark.scheduler.allocation.file", "") \
+    .config("spark.dynamicAllocation.enabled", "false") \
     .getOrCreate()
 
 # Set log level to reduce noise
@@ -78,28 +84,62 @@ def define_order_schema():
     ])
 
 def load_customer_data(file_paths):
-    """Load customer data from CSV files"""
+    """Load customer data from CSV files with improved error handling"""
     # Define schema
     customer_schema = define_customer_schema()
-    
-    # Read CSV files with the schema
-    df = spark.read.schema(customer_schema).csv(file_paths, header=True)
-    
-    # Print statistics
-    row_count = df.count()
-    print(f"Loaded {row_count} customer records")
-    
-    # Basic validation
-    if row_count == 0:
-        print("No data found in the input files")
+        
+    # Make sure file_paths is a list
+    if isinstance(file_paths, str):
+        file_paths = [file_paths]
+        
+    print(f"Attempting to load {len(file_paths)} customer files")
+        
+    # Check if files exist before attempting to load
+    existing_files = [f for f in file_paths if os.path.exists(f)]
+    print(f"Found {len(existing_files)} existing customer files")
+        
+    if not existing_files:
+        print("No customer files found!")
         return None
-    
+        
+    # Process in smaller batches to avoid overwhelming Spark
+    batch_size = 10
+    all_data_frames = []
+        
+    for i in range(0, len(existing_files), batch_size):
+        batch = existing_files[i:i+batch_size]
+        print(f"Processing batch {i//batch_size + 1}/{(len(existing_files) + batch_size - 1)//batch_size} with {len(batch)} files")
+            
+        try:
+            # Read CSV files with the schema
+            batch_df = spark.read.schema(customer_schema).csv(batch, header=True)
+            row_count = batch_df.count()
+            print(f"Loaded {row_count} customer records from batch")
+                
+            all_data_frames.append(batch_df)
+        except Exception as e:
+            print(f"Error processing batch: {e}")
+            # Continue with next batch
+        
+    if not all_data_frames:
+        print("No data could be loaded from any batch")
+        return None
+        
+    # Union all batches
+    df = all_data_frames[0]
+    for batch_df in all_data_frames[1:]:
+        df = df.union(batch_df)
+        
+    # Basic validation
+    row_count = df.count()
+    print(f"Loaded {row_count} customer records in total")
+        
     # Add metadata columns
     df_with_metadata = df \
         .withColumn("data_source", lit("crm")) \
         .withColumn("batch_id", lit(datetime.now().strftime("%Y%m%d%H%M%S"))) \
         .withColumn("ingestion_timestamp", current_timestamp())
-    
+        
     return df_with_metadata
 
 def load_order_data(file_paths):
@@ -131,10 +171,12 @@ def process_crm_data(file_paths):
     """Process customer and order data and save to Bronze storage"""
     # Parse file paths if provided as string
     if isinstance(file_paths, str):
-        try:
-            file_paths = json.loads(file_paths)
-        except json.JSONDecodeError:
-            file_paths = [file_paths]  # Single file path
+        if ',' in file_paths:
+            file_paths = file_paths.split(',')
+        else:
+            file_paths = [file_paths]
+
+            
     
     if not file_paths:
         # Default to latest files or check for a date range

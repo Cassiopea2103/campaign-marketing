@@ -20,8 +20,11 @@ from datetime import datetime
 
 # Initialize Spark Session with Kafka
 spark = SparkSession.builder \
+    .master("spark://spark-master:7077") \
     .appName("Web Logs Ingestion") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1") \
+    .config("spark.network.timeout", "300s") \
+    .config("spark.executor.heartbeatInterval", "60s") \
     .getOrCreate()
 
 # Set log level to reduce noise
@@ -97,10 +100,14 @@ def ingest_logs_to_kafka(file_paths):
     """Ingest log files to Kafka"""
     # Parse file paths if provided as string
     if isinstance(file_paths, str):
+        
         try:
             file_paths = json.loads(file_paths)
         except json.JSONDecodeError:
-            file_paths = [file_paths]  # Single file path
+            if ',' in file_paths:
+                file_paths = file_paths.split(',')
+            else:
+                file_paths = [file_paths] 
     
     if not file_paths:
         print("No files to process")
@@ -158,14 +165,13 @@ if __name__ == "__main__":
     if not file_paths:
         # Default to latest files in the web data directory
         data_dir = "/data/raw/web"
-        today = datetime.now().strftime("%Y%m%d")
         
-        # Find files for today
+        # Find files 
         import glob
-        file_paths = glob.glob(f"{data_dir}/web_logs_{today}*.json")
+        file_paths = glob.glob(f"{data_dir}/web_logs_*.json")
         
         if not file_paths:
-            print(f"No log files found for {today}")
+            print(f"No log files found")
             sys.exit(0)
     
     ingest_logs_to_kafka(file_paths)

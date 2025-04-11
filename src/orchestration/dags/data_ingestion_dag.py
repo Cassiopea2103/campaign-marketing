@@ -125,9 +125,8 @@ ingest_web_logs = SparkSubmitOperator(
     application='/src/ingestion/streaming/ingest_web_logs.py',
     name='web_logs_to_kafka',
     conn_id='spark_default',
-    application_args=['{{ ti.xcom_pull(task_ids="check_web_logs") }}'],
+    application_args=["{{ ','.join(ti.xcom_pull(task_ids='check_web_logs')) }}"],
     conf={
-        'spark.master': 'spark://spark-master:7077', 
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
@@ -140,7 +139,6 @@ ingest_web_logs_to_bronze = SparkSubmitOperator(
     name='web_logs_to_bronze',
     conn_id='spark_default',
     conf={
-        'spark.master': 'spark://spark-master:7077', 
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
@@ -152,9 +150,8 @@ ingest_crm_to_bronze = SparkSubmitOperator(
     application='/src/ingestion/batch/crm_to_bronze.py',
     name='crm_to_bronze',
     conn_id='spark_default',
-    application_args=['{{ ti.xcom_pull(task_ids="check_crm_data") }}'],
+    application_args=["{{ ','.join(ti.xcom_pull(task_ids='check_crm_data')) }}"],
     conf={
-        'spark.master': 'spark://spark-master:7077', 
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
@@ -167,13 +164,11 @@ ingest_advertising_to_bronze = SparkSubmitOperator(
     application='/src/ingestion/batch/advertising_to_bronze.py',
     name='advertising_to_bronze',
     conn_id='spark_default',
-    application_args=['{{ ti.xcom_pull(task_ids="check_advertising_data") }}'],
+    application_args=["{{ ','.join(ti.xcom_pull(task_ids='check_advertising_data')) }}"],
     conf={
-        'spark.master': 'spark://spark-master:7077', 
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
-    
     dag=dag,
     
 )

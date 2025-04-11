@@ -21,8 +21,11 @@ from datetime import datetime
 # Initialize Spark Session with Kafka
 spark = SparkSession.builder \
     .appName("Web Logs Streaming to Bronze") \
+    .master("spark://spark-master:7077") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1") \
     .config("spark.sql.streaming.checkpointLocation", "/data/checkpoints/web_logs_bronze") \
+    .config("spark.network.timeout", "300s") \
+    .config("spark.executor.heartbeatInterval", "60s") \
     .config("spark.streaming.stopGracefullyOnShutdown", "true") \
     .getOrCreate()
 
