@@ -51,55 +51,50 @@ AD_DATA_PATH = f'{RAW_DATA_PATH}/advertising'
 # Task functions
 def check_web_logs(**kwargs):
     """Check for new web log files and return file paths for processing"""
-    execution_date = kwargs['execution_date']
-    date_str = execution_date.strftime('%Y%m%d')
     
     # Look for web log files for the execution date
-    log_files = glob.glob(f"{WEB_DATA_PATH}/web_logs_{date_str}*.json")
+    log_files = glob.glob(f"{WEB_DATA_PATH}/web_logs_*.json")
     
     if not log_files:
-        logging.info(f"No web logs found for {date_str}")
+        logging.info(f"No web logs found")
         return []
     
-    logging.info(f"Found {len(log_files)} web log files for {date_str}")
+    logging.info(f"Found {len(log_files)} web log files")
     return log_files
 
 def check_crm_data(**kwargs):
     """Check for new CRM data files and return file paths for processing"""
-    execution_date = kwargs['execution_date']
-    date_str = execution_date.strftime('%Y%m%d')
-    
+
     # Look for customer and order files for the execution date
-    customer_files = glob.glob(f"{CRM_DATA_PATH}/customers_{date_str}*.csv")
-    order_files = glob.glob(f"{CRM_DATA_PATH}/orders_{date_str}*.csv")
+    customer_files = glob.glob(f"{CRM_DATA_PATH}/customers_*.csv")
+    order_files = glob.glob(f"{CRM_DATA_PATH}/orders_*.csv")
     
     all_files = customer_files + order_files
     
     if not all_files:
-        logging.info(f"No CRM data found for {date_str}")
+        logging.info(f"No CRM data found ")
         return []
     
-    logging.info(f"Found {len(all_files)} CRM files for {date_str}")
+    logging.info(f"Found {len(all_files)} CRM files ")
     return all_files
 
 def check_advertising_data(**kwargs):
     """Check for new advertising data files and return file paths for processing"""
     execution_date = kwargs['execution_date']
-    date_str = execution_date.strftime('%Y%m%d')
     
     # Look for advertising files for the execution date
-    google_files = glob.glob(f"{AD_DATA_PATH}/google_ads_{date_str}*.csv")
-    social_files = glob.glob(f"{AD_DATA_PATH}/social_ads_{date_str}*.csv")
-    influencer_files = glob.glob(f"{AD_DATA_PATH}/influencer_data_{date_str}*.csv")
-    all_platform_files = glob.glob(f"{AD_DATA_PATH}/all_platforms_{date_str}*.csv")
+    google_files = glob.glob(f"{AD_DATA_PATH}/google_ads_*.csv")
+    social_files = glob.glob(f"{AD_DATA_PATH}/social_ads_*.csv")
+    influencer_files = glob.glob(f"{AD_DATA_PATH}/influencer_data_*.csv")
+    all_platform_files = glob.glob(f"{AD_DATA_PATH}/all_platforms_*.csv")
     
     all_files = google_files + social_files + influencer_files + all_platform_files
     
     if not all_files:
-        logging.info(f"No advertising data found for {date_str}")
+        logging.info(f"No advertising data found ")
         return []
     
-    logging.info(f"Found {len(all_files)} advertising files for {date_str}")
+    logging.info(f"Found {len(all_files)} advertising files")
     return all_files
 
 # Define tasks
