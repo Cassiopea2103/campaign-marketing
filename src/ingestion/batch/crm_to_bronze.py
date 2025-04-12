@@ -22,12 +22,7 @@ from datetime import datetime
 # Initialize Spark Session
 spark = SparkSession.builder \
     .appName("CRM Data to Bronze") \
-    .config("spark.network.timeout", "600s") \
-    .config("spark.executor.heartbeatInterval", "120s") \
-    .config("spark.driver.maxResultSize", "2g") \
-    .config("spark.scheduler.mode", "FAIR") \
-    .config("spark.scheduler.allocation.file", "") \
-    .config("spark.dynamicAllocation.enabled", "false") \
+    .master("spark://spark-master:7077")  \
     .getOrCreate()
 
 # Set log level to reduce noise
