@@ -37,10 +37,21 @@ spark = SparkSession.builder \
 spark.sparkContext.setLogLevel("WARN")
 
 bronze_dir = "/data/bronze/customers"
+bronze_customers_dir = "/data/bronze/customers"
+bronze_orders_dir = "/data/bronze/orders"
+os.makedirs(bronze_customers_dir, exist_ok=True)
+os.makedirs(bronze_orders_dir, exist_ok=True)
+
 if not os.path.exists(bronze_dir):
     os.makedirs(bronze_dir, exist_ok=True)
     # Ensure proper permissions
     os.chmod(bronze_dir, 0o777) 
+
+try:
+    os.chmod(bronze_customers_dir, 0o777)
+    os.chmod(bronze_orders_dir, 0o777)
+except Exception as e:
+    print(f"Warning: Could not set permissions: {e}")
 
 
 def define_customer_schema():
@@ -226,7 +237,7 @@ def process_crm_data(file_paths):
             # Write to Bronze storage in Parquet format
             customer_df.write \
                 .format("parquet") \
-                .mode("append") \
+                .mode("overwrite") \
                 .save("/data/bronze/customers")
             
             print(f"Successfully wrote {customer_df.count()} customer records to Bronze")
@@ -240,7 +251,7 @@ def process_crm_data(file_paths):
             # Write to Bronze storage in Parquet format
             order_df.write \
                 .format("parquet") \
-                .mode("append") \
+                .mode("overwrite") \
                 .save("/data/bronze/orders")
             
             print(f"Successfully wrote {order_df.count()} order records to Bronze")
