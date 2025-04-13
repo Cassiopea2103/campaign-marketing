@@ -76,6 +76,15 @@ services:
           cpus: '2'
           memory: 4G
     user: "1000:1000"  
+    command: >
+      bash -c "
+        mkdir -p /data/bronze/customers /data/bronze/orders /data/silver /data/gold &&
+        chmod -R 777 /data &&
+        chown -R 1000:1000 /data &&
+        /opt/bitnami/scripts/spark/entrypoint.sh /opt/bitnami/scripts/spark/run.sh
+      "
+    # The above command creates the necessary directories and sets permissions
+    # before starting the Spark master process.
 
   spark-worker:
     image: bitnami/spark:3.3.1
@@ -280,4 +289,8 @@ volumes:
   grafana-data:
   data-volume:
     driver: local
-  
+    driver_opts:
+      type: none
+      device: ${PWD}/data
+      o: bind
+      
