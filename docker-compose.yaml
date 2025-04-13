@@ -68,14 +68,13 @@ services:
       - data-network
     volumes:
       - ./data:/data
-      - data-volume:/data
       - ./src:/src
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 4G
-    user: "1000:1000"  
+    user: "root"  
     command: >
       bash -c "
         mkdir -p /data/bronze/customers /data/bronze/orders /data/silver /data/gold &&
@@ -107,8 +106,7 @@ services:
     volumes:
       - ./data:/data
       - ./src:/src
-      - data-volume:/data
-    user: "1000:1000"
+    user: "root"
 
 
 
@@ -144,7 +142,7 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
-      - ADDITIONAL_PYTHON_PACKAGES=apache-airflow-providers-apache-spark
+      - ADDITIONAL_PYTHON_PACKAGES=apache-airflow-providers-apache-spark==4.1.0
       - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
     volumes:
       - ./src/orchestration/dags:/opt/airflow/dags
@@ -152,8 +150,7 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data:/data
       - ./src:/src
-      - data-volume:/data
-    user: "1000:1000"
+    user: "root"
     ports:
       - "8088:8080"
     command: webserver
@@ -179,7 +176,7 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
-      - ADDITIONAL_PYTHON_PACKAGES=apache-airflow-providers-apache-spark
+      - ADDITIONAL_PYTHON_PACKAGES=apache-airflow-providers-apache-spark==4.1.0
       - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
     volumes:
       - ./src/orchestration/dags:/opt/airflow/dags
@@ -187,8 +184,7 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data:/data
       - ./src:/src
-      - data-volume:/data
-    user: "1000:1000"
+    user: "root"
 
     command: scheduler
     networks:
@@ -289,8 +285,4 @@ volumes:
   grafana-data:
   data-volume:
     driver: local
-    driver_opts:
-      type: none
-      device: ${PWD}/data
-      o: bind
-      
+  

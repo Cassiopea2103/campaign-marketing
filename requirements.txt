@@ -1,1 +1,1 @@
-apache-airflow-providers-apache-spark==4.11.3
+apache-airflow-providers-apache-spark==4.1.0
