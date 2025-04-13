@@ -23,10 +23,18 @@ from datetime import datetime
 spark = SparkSession.builder \
     .appName("CRM Data to Bronze") \
     .master("spark://spark-master:7077")  \
+    .config("spark.network.timeout", "600s") \
+    .config("spark.executor.heartbeatInterval", "120s") \
+    .config("spark.speculation", "true") \
     .getOrCreate()
 
 # Set log level to reduce noise
 spark.sparkContext.setLogLevel("WARN")
+
+bronze_dir = "/data/bronze/customers"
+if not os.path.exists(bronze_dir):
+    os.makedirs(bronze_dir, exist_ok=True)
+
 
 def define_customer_schema():
     """Define the schema for customer data"""

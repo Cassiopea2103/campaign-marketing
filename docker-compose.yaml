@@ -68,12 +68,14 @@ services:
       - data-network
     volumes:
       - ./data:/data
+      - data-volume:/data
       - ./src:/src
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 4G
+    user: "1000:1000"  
 
   spark-worker:
     image: bitnami/spark:3.3.1
@@ -96,6 +98,10 @@ services:
     volumes:
       - ./data:/data
       - ./src:/src
+      - data-volume:/data
+    user: "1000:1000"
+
+
 
   # Airflow for orchestration
   postgres:
@@ -137,6 +143,8 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data:/data
       - ./src:/src
+      - data-volume:/data
+    user: "1000:1000"
     ports:
       - "8088:8080"
     command: webserver
@@ -170,6 +178,8 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data:/data
       - ./src:/src
+      - data-volume:/data
+    user: "1000:1000"
 
     command: scheduler
     networks:
@@ -268,4 +278,6 @@ volumes:
   minio-data:
   prometheus-data:
   grafana-data:
+  data-volume:
+    driver: local
   
