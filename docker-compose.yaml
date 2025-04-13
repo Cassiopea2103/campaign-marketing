@@ -107,6 +107,13 @@ services:
       - ./data:/data
       - ./src:/src
     user: "root"
+    command: >
+      bash -c "
+        mkdir -p /data/bronze/customers /data/bronze/orders /data/silver /data/gold &&
+        chmod -R 777 /data &&
+        chown -R 1000:1000 /data &&
+        /opt/bitnami/scripts/spark/entrypoint.sh /opt/bitnami/scripts/spark/run.sh
+      "
 
 
 

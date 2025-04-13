@@ -26,6 +26,11 @@ spark = SparkSession.builder \
     .config("spark.network.timeout", "600s") \
     .config("spark.executor.heartbeatInterval", "120s") \
     .config("spark.speculation", "true") \
+    .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem") \
+    .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2") \
+    .config("spark.sql.execution.arrow.enabled", "true") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.speculation", "true") \
     .getOrCreate()
 
 # Set log level to reduce noise
@@ -34,6 +39,8 @@ spark.sparkContext.setLogLevel("WARN")
 bronze_dir = "/data/bronze/customers"
 if not os.path.exists(bronze_dir):
     os.makedirs(bronze_dir, exist_ok=True)
+    # Ensure proper permissions
+    os.chmod(bronze_dir, 0o777) 
 
 
 def define_customer_schema():
