@@ -202,25 +202,14 @@ def process_crm_data(file_paths):
     if not file_paths:
         # Default to latest files or check for a date range
         data_dir = "/data/raw/crm"
-        today = datetime.now().strftime("%Y%m%d")
+        file_paths = glob.glob(f"{data_dir}/customers_*.csv")
+        file_paths += glob.glob(f"{data_dir}/orders_*.csv")
         
-        # Try today's files
-        today_files = glob.glob(f"{data_dir}/customers_{today}*.csv")
-        today_files += glob.glob(f"{data_dir}/orders_{today}*.csv")
-
-        # If no today files, try any files in the directory
-        if not today_files:
-            all_files = glob.glob(f"{data_dir}/customers_*.csv")
-            all_files += glob.glob(f"{data_dir}/orders_*.csv")
-            
-            if all_files:
-                print(f"No files found for today, using most recent files instead.")
-                file_paths = all_files
-            else:
-                print(f"No CRM files found in the directory")
-                sys.exit(0)
+        if not file_paths:
+            print(f"No CRM files found in {data_dir}")
+            sys.exit(0)
         else:
-            file_paths = today_files
+            print(f"Found {len(file_paths)} CRM files to process")
     
     print(f"Processing {len(file_paths)} files")
     
@@ -264,14 +253,13 @@ if __name__ == "__main__":
     if not file_paths:
         # Default to latest files in the CRM data directory
         data_dir = "/data/raw/crm"
-        today = datetime.now().strftime("%Y%m%d")
         
         # Find files for today
-        file_paths = glob.glob(f"{data_dir}/customers_{today}*.csv")
-        file_paths += glob.glob(f"{data_dir}/orders_{today}*.csv")
+        file_paths = glob.glob(f"{data_dir}/customers_*.csv")
+        file_paths += glob.glob(f"{data_dir}/orders_*.csv")
         
         if not file_paths:
-            print(f"No CRM files found for {today}")
+            print(f"No CRM files found" )
             sys.exit(0)
     
     process_crm_data(file_paths)
