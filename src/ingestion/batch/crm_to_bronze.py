@@ -254,9 +254,10 @@ if __name__ == "__main__":
         # Default to latest files in the CRM data directory
         data_dir = "/data/raw/crm"
         
-        # Find files for today
+        # Find files 
         file_paths = glob.glob(f"{data_dir}/customers_*.csv")
         file_paths += glob.glob(f"{data_dir}/orders_*.csv")
+        print( file_paths)
         
         if not file_paths:
             print(f"No CRM files found" )
