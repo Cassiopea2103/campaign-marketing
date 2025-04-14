@@ -68,7 +68,7 @@ services:
       - data-network
     volumes:
       - data-volume:/data  
-      - /data:/data
+      - ./data:/data
       - ./src:/src
     deploy:
       resources:
@@ -106,7 +106,7 @@ services:
       - data-network
     volumes:
       - data-volume:/data  
-      - /data:/data
+      - ./data:/data
       - ./src:/src
     user: "root"
     command: >
@@ -158,7 +158,7 @@ services:
       - ./src/orchestration/plugins:/opt/airflow/plugins
       - ./logs:/opt/airflow/logs
       - data-volume:/data  
-      - /data:/data
+      - ./data:/data
       - ./src:/src
     user: "root"
     ports:
@@ -193,7 +193,7 @@ services:
       - ./src/orchestration/plugins:/opt/airflow/plugins
       - ./logs:/opt/airflow/logs
       - data-volume:/data  
-      - /data:/data
+      - ./data:/data
       - ./src:/src
     user: "root"
 

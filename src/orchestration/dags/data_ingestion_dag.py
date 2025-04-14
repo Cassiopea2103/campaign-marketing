@@ -45,7 +45,7 @@ dag = DAG(
 DATA_PATH = '/data'
 RAW_DATA_PATH = f'{DATA_PATH}/raw'
 WEB_DATA_PATH = f'{RAW_DATA_PATH}/web'
-CRM_DATA_PATH = f'{RAW_DATA_PATH}/crm'
+CRM_DATA_PATH = "/data/raw/crm"
 AD_DATA_PATH = f'{RAW_DATA_PATH}/advertising'
 
 # Task functions
@@ -64,10 +64,17 @@ def check_web_logs(**kwargs):
 
 def check_crm_data(**kwargs):
     """Check for new CRM data files and return file paths for processing"""
+    logging.info(f"Checking for CRM data in {CRM_DATA_PATH}")
+
+    # List all files in the directory to debug
+    all_files = glob.glob(f"{CRM_DATA_PATH}/*")
+    logging.info(f"All files in directory: {all_files}")
 
     # Look for customer and order files for the execution date
     customer_files = glob.glob(f"{CRM_DATA_PATH}/customers_*.csv")
     order_files = glob.glob(f"{CRM_DATA_PATH}/orders_*.csv")
+
+    logging.info(f"Found {len(customer_files)} customer files and {len(order_files)} order files")
     
     all_files = customer_files + order_files
     
