@@ -224,6 +224,9 @@ def process_crm_data(file_paths):
         
         if customer_df is not None:
             # Write to Bronze storage in Parquet format
+            # Ensure directory exists with proper permissions
+            os.makedirs("/data/bronze/customers", exist_ok=True)
+            os.chmod("/data/bronze/customers", 0o777)
             customer_df.write \
                 .format("parquet") \
                 .mode("overwrite") \
@@ -238,6 +241,9 @@ def process_crm_data(file_paths):
         
         if order_df is not None:
             # Write to Bronze storage in Parquet format
+            # Ensure directory exists with proper permissions
+            os.makedirs("/data/bronze/orders", exist_ok=True)
+            os.chmod("/data/bronze/orders", 0o777)
             order_df.write \
                 .format("parquet") \
                 .mode("overwrite") \
