@@ -16,6 +16,7 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType, I
 import json
 import sys
 import os
+import subprocess
 import glob
 from datetime import datetime
 
@@ -36,11 +37,17 @@ spark = SparkSession.builder \
 # Set log level to reduce noise
 spark.sparkContext.setLogLevel("WARN")
 
-bronze_dir = "/data/bronze/customers"
+bronze_dir = "/data/bronze"
 bronze_customers_dir = "/data/bronze/customers"
 bronze_orders_dir = "/data/bronze/orders"
 os.makedirs(bronze_customers_dir, exist_ok=True)
 os.makedirs(bronze_orders_dir, exist_ok=True)
+subprocess.run(["mkdir", "-p", bronze_dir], check=True)
+subprocess.run(["chmod", "777", bronze_dir], check=True)
+subprocess.run(["mkdir", "-p", bronze_customers_dir], check=True)
+subprocess.run(["chmod", "777", bronze_customers_dir], check=True)
+subprocess.run(["chmod", "777", bronze_orders_dir], check=True)
+
 
 if not os.path.exists(bronze_dir):
     os.makedirs(bronze_dir, exist_ok=True)

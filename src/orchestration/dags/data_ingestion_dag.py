@@ -166,6 +166,7 @@ ingest_crm_to_bronze = SparkSubmitOperator(
         'spark.master': 'spark://spark-master:7077',  
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
+        'spark.jars.packages': 'org.apache.hadoop:hadoop-aws:3.3.1',
     },
     dag=dag,
     
