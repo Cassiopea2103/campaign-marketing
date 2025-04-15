@@ -1,10 +1,10 @@
 """
-crm_to_bronze.py - Spark script to load CRM data to Bronze storage
+crm_to_bronze.py - Spark script to load CRM data to MinIO Bronze bucket
 
 This script:
 1. Loads customer and order data from CSV files
 2. Performs initial validation
-3. Writes the data to the Bronze zone of the data lake in Parquet format
+3. Writes the data to the Bronze zone in MinIO data lake in Parquet format
 
 Usage:
     spark-submit crm_to_bronze.py [file_paths_json]
@@ -12,54 +12,36 @@ Usage:
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit, current_timestamp, regexp_replace, when, from_json
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, TimestampType, ArrayType , BooleanType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, TimestampType, ArrayType, BooleanType
 import json
 import sys
 import os
-import subprocess
 import glob
 from datetime import datetime
 
-# Initialize Spark Session
+# Initialize Spark Session with S3/MinIO configuration
 spark = SparkSession.builder \
     .appName("CRM Data to Bronze") \
-    .master("spark://spark-master:7077")  \
+    .master("spark://spark-master:7077") \
     .config("spark.network.timeout", "600s") \
     .config("spark.executor.heartbeatInterval", "120s") \
     .config("spark.speculation", "true") \
-    .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem") \
-    .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2") \
-    .config("spark.sql.execution.arrow.enabled", "true") \
-    .config("spark.sql.adaptive.enabled", "true") \
-    .config("spark.speculation", "true") \
+    .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
+    .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+    .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.1") \
     .getOrCreate()
 
 # Set log level to reduce noise
 spark.sparkContext.setLogLevel("WARN")
 
-bronze_dir = "/data/bronze"
-bronze_customers_dir = "/data/bronze/customers"
-bronze_orders_dir = "/data/bronze/orders"
-os.makedirs(bronze_customers_dir, exist_ok=True)
-os.makedirs(bronze_orders_dir, exist_ok=True)
-subprocess.run(["mkdir", "-p", bronze_dir], check=True)
-subprocess.run(["chmod", "777", bronze_dir], check=True)
-subprocess.run(["mkdir", "-p", bronze_customers_dir], check=True)
-subprocess.run(["chmod", "777", bronze_customers_dir], check=True)
-subprocess.run(["chmod", "777", bronze_orders_dir], check=True)
-
-
-if not os.path.exists(bronze_dir):
-    os.makedirs(bronze_dir, exist_ok=True)
-    # Ensure proper permissions
-    os.chmod(bronze_dir, 0o777) 
-
-try:
-    os.chmod(bronze_customers_dir, 0o777)
-    os.chmod(bronze_orders_dir, 0o777)
-except Exception as e:
-    print(f"Warning: Could not set permissions: {e}")
-
+# Define MinIO paths
+MINIO_BRONZE_BUCKET = "s3a://bronze"
+MINIO_CUSTOMERS_PATH = f"{MINIO_BRONZE_BUCKET}/customers"
+MINIO_ORDERS_PATH = f"{MINIO_BRONZE_BUCKET}/orders"
 
 def define_customer_schema():
     """Define the schema for customer data"""
@@ -196,15 +178,13 @@ def load_order_data(file_paths):
     return df_with_metadata
 
 def process_crm_data(file_paths):
-    """Process customer and order data and save to Bronze storage"""
+    """Process customer and order data and save to MinIO Bronze bucket"""
     # Parse file paths if provided as string
     if isinstance(file_paths, str):
         if ',' in file_paths:
             file_paths = file_paths.split(',')
         else:
             file_paths = [file_paths]
-
-            
     
     if not file_paths:
         # Default to latest files or check for a date range
@@ -230,16 +210,29 @@ def process_crm_data(file_paths):
         customer_df = load_customer_data(customer_files)
         
         if customer_df is not None:
-            # Write to Bronze storage in Parquet format
-            # Ensure directory exists with proper permissions
-            os.makedirs("/data/bronze/customers", exist_ok=True)
-            os.chmod("/data/bronze/customers", 0o777)
-            customer_df.write \
-                .format("parquet") \
-                .mode("overwrite") \
-                .save("/data/bronze/customers")
+            # Extract date for partitioning
+            current_date = datetime.now()
+            year = current_date.strftime('%Y')
+            month = current_date.strftime('%m')
+            day = current_date.strftime('%d')
             
-            print(f"Successfully wrote {customer_df.count()} customer records to Bronze")
+            # Add partition columns
+            customer_df_with_partitions = customer_df \
+                .withColumn("year", lit(year)) \
+                .withColumn("month", lit(month)) \
+                .withColumn("day", lit(day))
+            
+            # Write to MinIO Bronze bucket in Parquet format with partitioning
+            try:
+                customer_df_with_partitions.write \
+                    .format("parquet") \
+                    .mode("overwrite") \
+                    .partitionBy("year", "month", "day") \
+                    .save(MINIO_CUSTOMERS_PATH)
+                
+                print(f"Successfully wrote {customer_df.count()} customer records to MinIO Bronze bucket at {MINIO_CUSTOMERS_PATH}")
+            except Exception as e:
+                print(f"Error writing customer data to MinIO: {e}")
     
     # Process order data
     if order_files:
@@ -247,16 +240,29 @@ def process_crm_data(file_paths):
         order_df = load_order_data(order_files)
         
         if order_df is not None:
-            # Write to Bronze storage in Parquet format
-            # Ensure directory exists with proper permissions
-            os.makedirs("/data/bronze/orders", exist_ok=True)
-            os.chmod("/data/bronze/orders", 0o777)
-            order_df.write \
-                .format("parquet") \
-                .mode("overwrite") \
-                .save("/data/bronze/orders")
+            # Extract date for partitioning
+            current_date = datetime.now()
+            year = current_date.strftime('%Y')
+            month = current_date.strftime('%m')
+            day = current_date.strftime('%d')
             
-            print(f"Successfully wrote {order_df.count()} order records to Bronze")
+            # Add partition columns
+            order_df_with_partitions = order_df \
+                .withColumn("year", lit(year)) \
+                .withColumn("month", lit(month)) \
+                .withColumn("day", lit(day))
+            
+            # Write to MinIO Bronze bucket in Parquet format with partitioning
+            try:
+                order_df_with_partitions.write \
+                    .format("parquet") \
+                    .mode("overwrite") \
+                    .partitionBy("year", "month", "day") \
+                    .save(MINIO_ORDERS_PATH)
+                
+                print(f"Successfully wrote {order_df.count()} order records to MinIO Bronze bucket at {MINIO_ORDERS_PATH}")
+            except Exception as e:
+                print(f"Error writing order data to MinIO: {e}")
 
 if __name__ == "__main__":
     # Get file paths from command line arguments
@@ -270,10 +276,20 @@ if __name__ == "__main__":
         # Find files 
         file_paths = glob.glob(f"{data_dir}/customers_*.csv")
         file_paths += glob.glob(f"{data_dir}/orders_*.csv")
-        print( file_paths)
         
         if not file_paths:
-            print(f"No CRM files found" )
+            print(f"No CRM files found")
             sys.exit(0)
     
+    # Check if MinIO Bronze bucket exists, create if not
+    try:
+        from pyspark.sql.functions import expr
+        
+        # Simple test to check connectivity
+        dummy_df = spark.createDataFrame([("test",)], ["col1"])
+        dummy_df.write.format("parquet").mode("overwrite").save(f"{MINIO_BRONZE_BUCKET}/test")
+        print(f"Successfully connected to MinIO at {MINIO_BRONZE_BUCKET}")
+    except Exception as e:
+        print(f"Warning: Could not verify MinIO bucket access. The bucket may need to be created manually: {e}")
+        
     process_crm_data(file_paths)
