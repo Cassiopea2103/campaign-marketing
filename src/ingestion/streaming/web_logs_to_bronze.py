@@ -159,6 +159,8 @@ def process_web_logs_stream():
             .withColumn("data_source", lit("kafka")) \
             .withColumn("batch_id", lit(datetime.now().strftime("%Y%m%d%H%M%S")))
         print ("Added source info")
+        print ( "Final DataFrame schema: ", final_df.printSchema())
+        print ( "Final dataframe :" , final_df.show(5, truncate=False))
             
         # Stream to Bronze storage in parquet format, partitioned by time
         print ("Starting streaming to Bronze storage...")
