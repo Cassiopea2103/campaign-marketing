@@ -135,9 +135,11 @@ ingest_web_logs = SparkSubmitOperator(
     application_args=["{{ ','.join(ti.xcom_pull(task_ids='check_web_logs')) }}"],
     verbose=True,
     conf={
+        'spark.master': 'spark://spark-master:7077', 
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
@@ -152,6 +154,7 @@ ingest_web_logs_to_bronze = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
@@ -166,8 +169,8 @@ ingest_crm_to_bronze = SparkSubmitOperator(
         'spark.master': 'spark://spark-master:7077',  
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
-        'spark.jars.packages': 'org.apache.hadoop:hadoop-aws:3.3.1',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
     
 )
@@ -184,6 +187,7 @@ ingest_advertising_to_bronze = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
     
 )
