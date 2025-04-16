@@ -5,6 +5,7 @@ This script:
 1. Reads web log JSON files
 2. Performs basic validations
 3. Publishes events to Kafka for streaming processing
+4. Has fallback logic to write to local files if Kafka is unavailable
 
 Usage:
     spark-submit ingest_web_logs.py [file_paths_json]
@@ -19,17 +20,43 @@ import os
 from datetime import datetime
 
 # Initialize Spark Session with Kafka
-spark = SparkSession.builder \
-    .master("spark://spark-master:7077") \
-    .appName("Web Logs Ingestion") \
-    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1") \
-    .config("spark.network.timeout", "300s") \
-    .config("spark.executor.heartbeatInterval", "60s") \
-    .getOrCreate()
+spark = None
+
+def init_spark_session():
+    """Initialize Spark session with appropriate configurations"""
+    global spark
+    
+    # Try to initialize with Kafka packages first
+    try:
+        spark = SparkSession.builder \
+            .master("spark://spark-master:7077") \
+            .appName("Web Logs Ingestion") \
+            .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1") \
+            .config("spark.network.timeout", "300s") \
+            .config("spark.executor.heartbeatInterval", "60s") \
+            .getOrCreate()
+        
+        # Test if Kafka is available
+        test_df = spark.createDataFrame([("test",)], ["value"])
+        # Just try to reference the Kafka format to test if it's available
+        test_df.write.format("kafka")
+        print("Spark session initialized with Kafka support")
+        return True
+    except Exception as e:
+        print(f"Could not initialize Spark with Kafka: {e}")
+        
+        # Fall back to regular Spark session
+        spark = SparkSession.builder \
+            .master("spark://spark-master:7077") \
+            .appName("Web Logs Ingestion") \
+            .config("spark.network.timeout", "300s") \
+            .config("spark.executor.heartbeatInterval", "60s") \
+            .getOrCreate()
+        
+        print("Initialized fallback Spark session without Kafka")
+        return False
 
 # Set log level to reduce noise
-spark.sparkContext.setLogLevel("WARN")
-
 def define_web_log_schema():
     """Define the schema for web log data"""
     # User schema
@@ -96,8 +123,8 @@ def define_web_log_schema():
     
     return web_log_schema
 
-def ingest_logs_to_kafka(file_paths):
-    """Ingest log files to Kafka"""
+def ingest_logs_to_kafka(file_paths, kafka_available=True):
+    """Ingest log files to Kafka or fallback to local storage"""
     # Parse file paths if provided as string
     if isinstance(file_paths, str):
         
@@ -148,16 +175,57 @@ def ingest_logs_to_kafka(file_paths):
         to_json(struct("*")).alias("value")
     )
     
-    # Write to Kafka topic
-    kafka_df.write \
-        .format("kafka") \
-        .option("kafka.bootstrap.servers", "kafka:29092") \
-        .option("topic", "web-logs") \
-        .save()
+    if kafka_available:
+        try:
+            # Write to Kafka topic
+            kafka_df.write \
+                .format("kafka") \
+                .option("kafka.bootstrap.servers", "kafka:29092") \
+                .option("topic", "web-logs") \
+                .save()
+            
+            print(f"Successfully ingested {validated_df.count()} events to Kafka topic 'web-logs'")
+            return True
+        except Exception as e:
+            print(f"Error writing to Kafka: {e}")
+            print("Falling back to local file storage")
+            kafka_available = False
     
-    print(f"Successfully ingested {validated_df.count()} events to Kafka topic 'web-logs'")
+    # Fallback: Write to local file storage if Kafka is not available
+    if not kafka_available:
+        try:
+            # Define output directory
+            output_dir = "/data/bronze/web_logs"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Get current timestamp for the filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = f"{output_dir}/web_logs_fallback_{timestamp}"
+            
+            # Save as Parquet
+            validated_df \
+                .withColumn("year", lit(datetime.now().year)) \
+                .withColumn("month", lit(datetime.now().month)) \
+                .withColumn("day", lit(datetime.now().day)) \
+                .withColumn("ingestion_timestamp", lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))) \
+                .write \
+                .partitionBy("year", "month", "day") \
+                .mode("append") \
+                .parquet(output_path)
+            
+            print(f"Successfully wrote {validated_df.count()} events to local storage at {output_path}")
+            return True
+        except Exception as e:
+            print(f"Error writing to local storage: {e}")
+            return False
 
 if __name__ == "__main__":
+    # Initialize Spark session and check if Kafka is available
+    kafka_available = init_spark_session()
+    
+    # Set log level after initialization
+    spark.sparkContext.setLogLevel("WARN")
+    
     # Get file paths from command line arguments
     file_paths = sys.argv[1] if len(sys.argv) > 1 else None
     
@@ -174,4 +242,8 @@ if __name__ == "__main__":
             print(f"No log files found")
             sys.exit(0)
     
-    ingest_logs_to_kafka(file_paths)
+    # Process the files
+    success = ingest_logs_to_kafka(file_paths, kafka_available)
+    
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)

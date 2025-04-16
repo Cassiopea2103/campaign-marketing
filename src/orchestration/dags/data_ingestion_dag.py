@@ -127,6 +127,7 @@ check_advertising_data_task = PythonOperator(
 )
 
 # Spark jobs for data ingestion
+
 ingest_web_logs = SparkSubmitOperator(
     task_id='ingest_web_logs_to_kafka',
     application='/src/ingestion/streaming/ingest_web_logs.py',
@@ -135,10 +136,12 @@ ingest_web_logs = SparkSubmitOperator(
     application_args=["{{ ','.join(ti.xcom_pull(task_ids='check_web_logs')) }}"],
     verbose=True,
     conf={
-        'spark.master': 'spark://spark-master:7077', 
+        'spark.master': 'spark://spark-master:7077',
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
+        'spark.jars.packages': 'org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1',
     },
+    # Add the Hadoop S3 libs for future MinIO compatibility
     jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
