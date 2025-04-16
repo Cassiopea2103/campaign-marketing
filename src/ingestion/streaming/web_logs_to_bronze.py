@@ -13,7 +13,7 @@ Usage:
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, from_json, expr, window, to_timestamp, 
-    year, month, day, hour, minute, current_timestamp, lit
+    year, month, dayofmonth, hour, minute, current_timestamp, lit
 )
 from pyspark.sql.types import (
     StructType, StructField, StringType, TimestampType, 
@@ -27,11 +27,9 @@ from datetime import datetime
 spark = SparkSession.builder \
     .appName("Web Logs Streaming to Bronze") \
     .master("spark://spark-master:7077") \
-    .config("spark.executor.memory", "1g") \
-    .config("spark.driver.memory", "1g") \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1") \
     .config("spark.network.timeout", "300s") \
     .config("spark.executor.heartbeatInterval", "60s") \
-    .config("spark.streaming.stopGracefullyOnShutdown", "true") \
     .getOrCreate()
 
 # Set log level to reduce noise
@@ -116,6 +114,8 @@ def process_web_logs_stream():
         
         # Define schema
         web_log_schema = define_web_log_schema()
+
+        print ("Starting Spark Streaming to process web logs...")
         
         # Read from Kafka
         kafka_df = spark \
@@ -129,30 +129,39 @@ def process_web_logs_stream():
         print("Connected to Kafka stream")
         
         # Parse JSON from Kafka
+        print ("Parsing JSON from Kafka stream...")
         parsed_df = kafka_df.select(
             col("key").cast("string"),
             from_json(col("value").cast("string"), web_log_schema).alias("data"),
             col("timestamp").alias("kafka_timestamp")
         ).select("key", "data.*", "kafka_timestamp")
+        print ("Parsed JSON from Kafka stream")
         
         # Convert timestamp string to timestamp type for partitioning
+        print ("Converting timestamp to timestamp type...")
         df_with_timestamp = parsed_df \
             .withColumn("event_timestamp", to_timestamp(col("timestamp"))) \
             .withColumn("processing_timestamp", current_timestamp())
+        print ("Converted timestamp to timestamp type")
         
         # Add partition columns
+        print("adding partition columns...")
         partitioned_df = df_with_timestamp \
             .withColumn("year", year("event_timestamp")) \
             .withColumn("month", month("event_timestamp")) \
-            .withColumn("day", day("event_timestamp")) \
+            .withColumn("day", dayofmonth("event_timestamp")) \
             .withColumn("hour", hour("event_timestamp"))
+        print ("Added partition columns")
         
         # Add source info
+        print ("Adding source info...")
         final_df = partitioned_df \
             .withColumn("data_source", lit("kafka")) \
             .withColumn("batch_id", lit(datetime.now().strftime("%Y%m%d%H%M%S")))
+        print ("Added source info")
             
         # Stream to Bronze storage in parquet format, partitioned by time
+        print ("Starting streaming to Bronze storage...")
         query = final_df \
             .writeStream \
             .format("parquet") \
@@ -165,7 +174,9 @@ def process_web_logs_stream():
         print(f"Started streaming data to {bronze_path}")
         
         # Wait for the streaming query to finish
+        print("Waiting for streaming query to finish...")
         query.awaitTermination()
+        print("Streaming query finished")
     
     except Exception as e:
         print(f"Error processing web logs stream: {e}")
@@ -203,7 +214,7 @@ def process_web_logs_stream():
                     .withColumn("batch_id", lit(datetime.now().strftime("%Y%m%d%H%M%S"))) \
                     .withColumn("year", year("event_timestamp")) \
                     .withColumn("month", month("event_timestamp")) \
-                    .withColumn("day", day("event_timestamp")) \
+                    .withColumn("day", dayofmonth("event_timestamp")) \
                     .withColumn("hour", hour("event_timestamp"))
                 
                 # Write batch to bronze

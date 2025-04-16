@@ -31,7 +31,6 @@ RUN wget -P /opt/spark-jars https://repo1.maven.org/maven2/org/apache/commons/co
 RUN wget -P /opt/spark-jars https://repo1.maven.org/maven2/org/lz4/lz4-java/1.8.0/lz4-java-1.8.0.jar
 RUN wget -P /opt/spark-jars https://repo1.maven.org/maven2/org/xerial/snappy/snappy-java/1.1.8.4/snappy-java-1.1.8.4.jar
 
-
 # Set permissions for JAR files
 RUN chmod 644 /opt/jars/*.jar
 

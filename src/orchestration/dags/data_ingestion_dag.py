@@ -141,7 +141,7 @@ ingest_web_logs = SparkSubmitOperator(
         'spark.executor.memory': '1g',
         'spark.jars.packages': 'org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1',
     },
-    # Add the Hadoop S3 libs for future MinIO compatibility
+    # Add the Hadoop S3 libs for MinIO
     jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
@@ -156,8 +156,10 @@ ingest_web_logs_to_bronze = SparkSubmitOperator(
         'spark.master': 'spark://spark-master:7077', 
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
+        'spark.jars.packages': 'org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1',
+
     },
-    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar,/opt/jars/spark-sql-kafka-0-10_2.12-3.3.1.jar',
     dag=dag,
 )
 
