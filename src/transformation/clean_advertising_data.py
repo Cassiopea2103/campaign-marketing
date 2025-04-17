@@ -562,44 +562,40 @@ def clean_all_platforms_data():
 def create_cross_platform_metrics():
     """Create cross-platform performance metrics for comparison"""
     # Only create these metrics if all platform data is available
-        
+            
     try:
         # Get data from the all_platforms table
         all_platforms_df = spark.read.parquet(MINIO_SILVER_ALL_PLATFORMS)
-            
+                
         # Ensure numeric columns are actually numeric
-        # This will help prevent the "unsupported operand type(s) for +: 'int' and 'str'" error
-        numeric_cols = ["impressions", "clicks", "conversions", "cost", "conversion_value", "ctr", "cpc", "cpa"]
+        numeric_cols = ["impressions", "clicks", "conversions", "cost", "conversion_value"]
         for col_name in numeric_cols:
             all_platforms_df = all_platforms_df.withColumn(
                 col_name, 
-                when(col(col_name).isNotNull(), col(col_name).cast("double")).otherwise(0.0)
+                col(col_name).cast("double")
             )
-            
+                
         # Calculate metrics by platform
         platform_metrics = all_platforms_df \
             .groupBy("platform") \
             .agg(
-                sum("impressions").alias("total_impressions"),
-                sum("clicks").alias("total_clicks"),
-                sum("conversions").alias("total_conversions"),
-                sum("cost").alias("total_cost"),
-                sum("conversion_value").alias("total_revenue"),
-                avg("ctr").alias("avg_ctr"),
-                avg("cpc").alias("avg_cpc"),
-                avg("cpa").alias("avg_cpa")
+                sum(col("impressions")).alias("total_impressions"),
+                sum(col("clicks")).alias("total_clicks"),
+                sum(col("conversions")).alias("total_conversions"),
+                sum(col("cost")).alias("total_cost"),
+                sum(col("conversion_value")).alias("total_revenue")
             ) \
             .withColumn("roi", when(col("total_cost") > 0, (col("total_revenue") - col("total_cost")) / col("total_cost")).otherwise(0)) \
             .withColumn("conversion_rate", when(col("total_clicks") > 0, col("total_conversions") / col("total_clicks")).otherwise(0))
-            
+                
         # Write the metrics to a special table
         platform_metrics.write \
             .format("parquet") \
             .mode("overwrite") \
             .save(f"{MINIO_SILVER_BUCKET}/platform_metrics")
-            
+                
         print(f"Successfully created cross-platform metrics for {platform_metrics.count()} platforms")
-            
+                
         return platform_metrics
     except Exception as e:
         print(f"Error creating cross-platform metrics: {e}")
