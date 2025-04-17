@@ -54,103 +54,102 @@ wait_for_ingestion = ExternalTaskSensor(
 # Spark jobs for data transformation
 clean_web_logs = SparkSubmitOperator(
     task_id='clean_web_logs',
-    application='/src/etl/transformation/clean_web_logs.py',
+    application='/src/transformation/clean_web_logs.py',
     name='clean_web_logs',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+       
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar,/opt/spark/jars/spark-sql-kafka-0-10_2.12-3.3.1.jar,/opt/spark-jars/spark-token-provider-kafka-0-10_2.12-3.3.1.jar,/opt/spark-jars/kafka-clients-2.8.1.jar,/opt/spark-jars/commons-pool2-2.11.1.jar',
     dag=dag,
 )
 
 clean_crm_data = SparkSubmitOperator(
     task_id='clean_crm_data',
-    application='/src/etl/transformation/clean_crm_data.py',
+    application='/src/transformation/clean_crm_data.py',
     name='clean_crm_data',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+      
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 clean_advertising_data = SparkSubmitOperator(
     task_id='clean_advertising_data',
-    application='/src/etl/transformation/clean_advertising_data.py',
+    application='/src/transformation/clean_advertising_data.py',
     name='clean_advertising_data',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+   
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Create enriched customer profiles including order history
 create_customer_profiles = SparkSubmitOperator(
     task_id='create_customer_profiles',
-    application='/src/etl/transformation/create_customer_profiles.py',
+    application='/src/transformation/create_customer_profiles.py',
     name='create_customer_profiles',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+      
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Join web events with customer data for identified sessions
 join_web_customer_data = SparkSubmitOperator(
     task_id='join_web_customer_data',
-    application='/src/etl/transformation/join_web_customer_data.py',
+    application='/src/transformation/join_web_customer_data.py',
     name='join_web_customer_data',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+       
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Calculate attribution models
 create_attribution_models = SparkSubmitOperator(
     task_id='create_attribution_models',
-    application='/src/etl/transformation/create_attribution_models.py',
+    application='/src/transformation/create_attribution_models.py',
     name='create_attribution_models',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Quality check on Silver data
 run_silver_quality_checks = SparkSubmitOperator(
     task_id='run_silver_quality_checks',
-    application='/src/etl/quality/check_silver_data_quality.py',
+    application='/src/quality/check_silver_data_quality.py',
     name='silver_data_quality',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+    
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 

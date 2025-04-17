@@ -2,19 +2,19 @@
 clean_crm_data.py - Spark script to clean CRM data from Bronze to Silver
 
 This script:
-1. Reads customer and order data from the Bronze zone
+1. Reads customer and order data from the Bronze zone in MinIO
 2. Cleans and standardizes data
 3. Enriches with additional calculated fields
 4. Writes processed data to the Silver zone of the data lake
 
 Usage:
-    spark-submit clean_crm_data.py [date_string]
+    spark-submit clean_crm_data.py
 """
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, when, lit, regexp_replace, lower, trim, 
-    to_timestamp, date_format, datediff, current_date,
+    to_timestamp, date_format, datediff, current_timestamp,
     explode, split, from_json, struct, to_json,
     concat, expr, year, month, dayofmonth, udf
 )
@@ -26,29 +26,31 @@ from pyspark.sql.types import (
 import sys
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# Initialize Spark Session
+# Initialize Spark Session with S3/MinIO configuration
 spark = SparkSession.builder \
     .appName("Clean CRM Data") \
+    .master("spark://spark-master:7077") \
+    .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
+    .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
     .getOrCreate()
 
 # Set log level to reduce noise
 spark.sparkContext.setLogLevel("WARN")
 
-def get_date_to_process(date_arg=None):
-    """Determine the date to process from argument or default to yesterday"""
-    if date_arg:
-        try:
-            # Try to parse the date argument
-            process_date = datetime.strptime(date_arg, '%Y-%m-%d')
-            return process_date
-        except ValueError:
-            print(f"Invalid date format: {date_arg}. Using yesterday's date.")
-    
-    # Default to yesterday
-    yesterday = datetime.now() - timedelta(days=1)
-    return yesterday
+# Define MinIO paths
+MINIO_BRONZE_BUCKET = "s3a://bronze"
+MINIO_SILVER_BUCKET = "s3a://silver"
+MINIO_BRONZE_CUSTOMERS = f"{MINIO_BRONZE_BUCKET}/customers"
+MINIO_BRONZE_ORDERS = f"{MINIO_BRONZE_BUCKET}/orders"
+MINIO_SILVER_CUSTOMERS = f"{MINIO_SILVER_BUCKET}/customers"
+MINIO_SILVER_ORDERS = f"{MINIO_SILVER_BUCKET}/orders"
+MINIO_SILVER_ORDER_ITEMS = f"{MINIO_SILVER_BUCKET}/order_items"
 
 # Define the schema for order items
 order_item_schema = StructType([
@@ -65,7 +67,7 @@ def clean_customer_data():
     
     # Read data from Bronze zone
     try:
-        bronze_customers = spark.read.parquet("/data/bronze/customers")
+        bronze_customers = spark.read.parquet(MINIO_BRONZE_CUSTOMERS)
         
         # Log record count
         customer_count = bronze_customers.count()
@@ -75,8 +77,20 @@ def clean_customer_data():
             print("No customer records to process")
             return None
     except Exception as e:
-        print(f"Error reading Bronze customer data: {e}")
-        return None
+        print(f"Error reading Bronze customer data from MinIO: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_bronze_path = "/data/bronze/customers"
+            print(f"Attempting to read from local path: {local_bronze_path}")
+            bronze_customers = spark.read.parquet(local_bronze_path)
+            customer_count = bronze_customers.count()
+            print(f"Loaded {customer_count} customer records from local Bronze")
+            if customer_count == 0:
+                print("No customer records to process")
+                return None
+        except Exception as e2:
+            print(f"Error reading local Bronze customer data: {e2}")
+            return None
     
     # Data cleaning and standardization
     
@@ -99,7 +113,7 @@ def clean_customer_data():
     cleaned_df = cleaned_df \
         .withColumn("customer_tenure_days", 
                     when(col("registration_date").isNotNull(),
-                        datediff(current_date(), col("registration_date")))
+                        datediff(current_timestamp(), col("registration_date")))
                     .otherwise(0))
     
     # 5. Standardize categorical fields
@@ -134,7 +148,7 @@ def clean_customer_data():
     
     # 9. Add last updated timestamp 
     cleaned_df = cleaned_df \
-        .withColumn("silver_updated_at", current_date())
+        .withColumn("silver_updated_at", current_timestamp())
     
     # Select columns for Silver layer
     silver_customers = cleaned_df.select(
@@ -171,13 +185,29 @@ def clean_customer_data():
     )
     
     # Write to Silver zone in Parquet format with partitioning
-    silver_customers.write \
-        .format("parquet") \
-        .mode("overwrite") \
-        .partitionBy("year", "month") \
-        .save("/data/silver/customers")
-    
-    print(f"Successfully wrote {silver_customers.count()} customer records to Silver")
+    try:
+        silver_customers.write \
+            .format("parquet") \
+            .mode("overwrite") \
+            .partitionBy("year", "month") \
+            .save(MINIO_SILVER_CUSTOMERS)
+        
+        print(f"Successfully wrote {silver_customers.count()} customer records to Silver at {MINIO_SILVER_CUSTOMERS}")
+    except Exception as e:
+        print(f"Error writing customer data to MinIO Silver: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_silver_path = "/data/silver/customers"
+            print(f"Attempting to write to local path: {local_silver_path}")
+            silver_customers.write \
+                .format("parquet") \
+                .mode("overwrite") \
+                .partitionBy("year", "month") \
+                .save(local_silver_path)
+            print(f"Successfully wrote {silver_customers.count()} customer records to local Silver")
+        except Exception as e2:
+            print(f"Error writing customer data to local Silver: {e2}")
+            return None
     
     return silver_customers
 
@@ -187,7 +217,7 @@ def clean_order_data():
     
     # Read data from Bronze zone
     try:
-        bronze_orders = spark.read.parquet("/data/bronze/orders")
+        bronze_orders = spark.read.parquet(MINIO_BRONZE_ORDERS)
         
         # Log record count
         order_count = bronze_orders.count()
@@ -197,8 +227,20 @@ def clean_order_data():
             print("No order records to process")
             return None
     except Exception as e:
-        print(f"Error reading Bronze order data: {e}")
-        return None
+        print(f"Error reading Bronze order data from MinIO: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_bronze_path = "/data/bronze/orders"
+            print(f"Attempting to read from local path: {local_bronze_path}")
+            bronze_orders = spark.read.parquet(local_bronze_path)
+            order_count = bronze_orders.count()
+            print(f"Loaded {order_count} order records from local Bronze")
+            if order_count == 0:
+                print("No order records to process")
+                return None
+        except Exception as e2:
+            print(f"Error reading local Bronze order data: {e2}")
+            return None
     
     # Data cleaning and standardization
     
@@ -240,7 +282,7 @@ def clean_order_data():
     
     # 8. Add last updated timestamp
     cleaned_df = cleaned_df \
-        .withColumn("silver_updated_at", current_date())
+        .withColumn("silver_updated_at", current_timestamp())
     
     # Select columns for Silver layer
     silver_orders = cleaned_df.select(
@@ -271,13 +313,29 @@ def clean_order_data():
     )
     
     # Write to Silver zone in Parquet format with partitioning
-    silver_orders.write \
-        .format("parquet") \
-        .mode("overwrite") \
-        .partitionBy("order_year", "order_month") \
-        .save("/data/silver/orders")
-    
-    print(f"Successfully wrote {silver_orders.count()} order records to Silver")
+    try:
+        silver_orders.write \
+            .format("parquet") \
+            .mode("overwrite") \
+            .partitionBy("order_year", "order_month") \
+            .save(MINIO_SILVER_ORDERS)
+        
+        print(f"Successfully wrote {silver_orders.count()} order records to Silver at {MINIO_SILVER_ORDERS}")
+    except Exception as e:
+        print(f"Error writing order data to MinIO Silver: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_silver_path = "/data/silver/orders"
+            print(f"Attempting to write to local path: {local_silver_path}")
+            silver_orders.write \
+                .format("parquet") \
+                .mode("overwrite") \
+                .partitionBy("order_year", "order_month") \
+                .save(local_silver_path)
+            print(f"Successfully wrote {silver_orders.count()} order records to local Silver")
+        except Exception as e2:
+            print(f"Error writing order data to local Silver: {e2}")
+            return None
     
     # Also create an exploded view of order items
     try:
@@ -319,19 +377,27 @@ def clean_order_data():
             .format("parquet") \
             .mode("overwrite") \
             .partitionBy("order_year", "order_month") \
-            .save("/data/silver/order_items")
+            .save(MINIO_SILVER_ORDER_ITEMS)
         
-        print(f"Successfully wrote {order_items_df.count()} order item records to Silver")
+        print(f"Successfully wrote {order_items_df.count()} order item records to Silver at {MINIO_SILVER_ORDER_ITEMS}")
     except Exception as e:
         print(f"Error processing order items: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_order_items_path = "/data/silver/order_items"
+            print(f"Attempting to write order items to local path: {local_order_items_path}")
+            order_items_df.write \
+                .format("parquet") \
+                .mode("overwrite") \
+                .partitionBy("order_year", "order_month") \
+                .save(local_order_items_path)
+            print(f"Successfully wrote {order_items_df.count()} order item records to local Silver")
+        except Exception as e2:
+            print(f"Error writing order items to local Silver: {e2}")
     
     return silver_orders
 
-def clean_crm_data(process_date):
-    """Clean both customer and order data for the given date"""
-    date_str = process_date.strftime('%Y-%m-%d')
-    print(f"Processing CRM data for {date_str}")
-    
+if __name__ == "__main__":
     # Clean customer data
     silver_customers = clean_customer_data()
     
@@ -339,11 +405,4 @@ def clean_crm_data(process_date):
     silver_orders = clean_order_data()
     
     # Return success if both processes completed
-    return silver_customers is not None and silver_orders is not None
-
-if __name__ == "__main__":
-    # Get date from command line arguments or use default
-    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    process_date = get_date_to_process(date_arg)
-    
-    clean_crm_data(process_date)
+    sys.exit(0 if silver_customers is not None and silver_orders is not None else 1)
