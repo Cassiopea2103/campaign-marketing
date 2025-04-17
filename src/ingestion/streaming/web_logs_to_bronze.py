@@ -113,11 +113,15 @@ def process_web_logs_stream():
         # Create checkpoint directory
         checkpoint_dir = "s3a://bronze/checkpoints/web_logs"
         os.makedirs(checkpoint_dir, exist_ok=True)
+        if os.path.exists(checkpoint_dir):
+            os.chmod(checkpoint_dir, 0o777)
+
         
         # Define Bronze output path
         bronze_path = "s3a://bronze/web_logs"
-
         os.makedirs(bronze_path, exist_ok=True)
+        if os.path.exists(bronze_path):
+            os.chmod(bronze_path, 0o777)
         
         # Define schema
         web_log_schema = define_web_log_schema()
@@ -167,7 +171,6 @@ def process_web_logs_stream():
             .withColumn("batch_id", lit(datetime.now().strftime("%Y%m%d%H%M%S")))
         print ("Added source info")
         print ( "Final DataFrame schema: ", final_df.printSchema())
-        print ( "Final dataframe :" , final_df.show(5, truncate=False))
             
         # Stream to Bronze storage in parquet format, partitioned by time
         print ("Starting streaming to Bronze storage...")
@@ -176,7 +179,7 @@ def process_web_logs_stream():
             .format("parquet") \
             .option("path", bronze_path) \
             .option("checkpointLocation", checkpoint_dir) \
-            .trigger(processingTime="1 minute") \
+            .trigger(processingTime="5 minute") \
             .start()
             
         print(f"Started streaming data to {bronze_path}")
@@ -227,13 +230,13 @@ def process_web_logs_stream():
                 
                 # Write batch to bronze
                 local_bronze_path = "s3a://bronze/web_logs_batch"
-
-
                 os.makedirs(local_bronze_path, exist_ok=True)
+                if os.path.exists(local_bronze_path):
+                    os.chmod(local_bronze_path, 0o777)
                 
                 batch_with_ts.write \
                     .format("parquet") \
-                    .mode("append") \
+                    .mode("overwrite") \
                     .partitionBy("year", "month", "day", "hour") \
                     .save(local_bronze_path)
                     
