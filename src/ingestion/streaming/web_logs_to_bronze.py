@@ -28,6 +28,12 @@ spark = SparkSession.builder \
     .appName("Web Logs Streaming to Bronze") \
     .master("spark://spark-master:7077") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1") \
+    .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
+    .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
     .config("spark.network.timeout", "300s") \
     .config("spark.executor.heartbeatInterval", "60s") \
     .getOrCreate()
@@ -105,11 +111,12 @@ def process_web_logs_stream():
     """Process web logs from Kafka and save to Bronze storage"""
     try:
         # Create checkpoint directory
-        checkpoint_dir = "/data/checkpoints/web_logs_bronze"
+        checkpoint_dir = "s3a://bronze/checkpoints/web_logs"
         os.makedirs(checkpoint_dir, exist_ok=True)
         
         # Define Bronze output path
-        bronze_path = "/data/bronze/web_logs"
+        bronze_path = "s3a://bronze/web_logs"
+
         os.makedirs(bronze_path, exist_ok=True)
         
         # Define schema
@@ -168,7 +175,6 @@ def process_web_logs_stream():
             .writeStream \
             .format("parquet") \
             .option("path", bronze_path) \
-            .partitionBy("year", "month", "day", "hour") \
             .option("checkpointLocation", checkpoint_dir) \
             .trigger(processingTime="1 minute") \
             .start()
@@ -220,7 +226,9 @@ def process_web_logs_stream():
                     .withColumn("hour", hour("event_timestamp"))
                 
                 # Write batch to bronze
-                local_bronze_path = "/data/bronze/web_logs_batch"
+                local_bronze_path = "s3a://bronze/web_logs_batch"
+
+
                 os.makedirs(local_bronze_path, exist_ok=True)
                 
                 batch_with_ts.write \
