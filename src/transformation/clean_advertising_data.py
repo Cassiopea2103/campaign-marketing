@@ -16,7 +16,7 @@ from pyspark.sql.functions import (
     col, when, lit, regexp_replace, lower, trim, 
     to_timestamp, date_format, datediff, current_timestamp,
     explode, split, from_json, struct, to_json,
-    concat, expr, year, month, dayofmonth, round, avg
+    concat, expr, year, month, dayofmonth, round, avg as sql_avg, sum as sql_sum
 )
 from pyspark.sql.types import (
     StructType, StructField, StringType, IntegerType, 
@@ -579,11 +579,14 @@ def create_cross_platform_metrics():
         platform_metrics = all_platforms_df \
             .groupBy("platform") \
             .agg(
-                sum(col("impressions")).alias("total_impressions"),
-                sum(col("clicks")).alias("total_clicks"),
-                sum(col("conversions")).alias("total_conversions"),
-                sum(col("cost")).alias("total_cost"),
-                sum(col("conversion_value")).alias("total_revenue")
+               sql_sum("impressions").alias("total_impressions"),
+                sql_sum("clicks").alias("total_clicks"),
+                sql_sum("conversions").alias("total_conversions"),
+                sql_sum("cost").alias("total_cost"),
+                sql_sum("conversion_value").alias("total_revenue"),
+                sql_avg("ctr").alias("avg_ctr"),
+                sql_avg("cpc").alias("avg_cpc"),
+                sql_avg("cpa").alias("avg_cpa")
             ) \
             .withColumn("roi", when(col("total_cost") > 0, (col("total_revenue") - col("total_cost")) / col("total_cost")).otherwise(0)) \
             .withColumn("conversion_rate", when(col("total_clicks") > 0, col("total_conversions") / col("total_clicks")).otherwise(0))
