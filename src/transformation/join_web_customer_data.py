@@ -278,6 +278,16 @@ def join_customer_web_data(web_sessions, customers):
             regexp_replace(col("user_id"), "-", "")
         )
 
+        authenticated_sessions = authenticated_sessions.withColumn(
+            "normalized_email", 
+            lower(trim(col("user_email")))
+        )
+
+        customers = customers.withColumn(
+            "normalized_email", 
+            lower(trim(col("email")))
+        )
+
         
         auth_session_count = authenticated_sessions.count()
         print(f"Found {auth_session_count} authenticated sessions with user_id")
@@ -292,7 +302,7 @@ def join_customer_web_data(web_sessions, customers):
             .join(
                 customers.select(
                     "customer_id", 
-                    "normalized_customer_id",
+                    "normalized_email",
                     "first_name", 
                     "last_name", 
                     "email", 
@@ -303,7 +313,7 @@ def join_customer_web_data(web_sessions, customers):
                     "lifecycle_stage",
                     "value_segment"
                 ),
-                authenticated_sessions["normalized_user_id"] == customers["normalized_customer_id"],
+                authenticated_sessions["normalized_email"] == customers["normalized_email"],
                 "left"
             ) \
             .select(

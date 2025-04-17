@@ -23,10 +23,29 @@ from datetime import datetime, timedelta
 # Initialize Spark Session
 spark = SparkSession.builder \
     .appName("Marketing Attribution Models") \
+    .master("spark://spark-master:7077") \
+    .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
+    .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
     .getOrCreate()
 
 # Set log level to reduce noise
 spark.sparkContext.setLogLevel("WARN")
+
+# Define MinIO paths
+MINIO_SILVER_BUCKET = "s3a://silver"
+MINIO_SILVER_WEB_SESSIONS = f"{MINIO_SILVER_BUCKET}/web_sessions"
+MINIO_SILVER_CUSTOMER_SESSIONS = f"{MINIO_SILVER_BUCKET}/customer_sessions"
+MINIO_SILVER_ORDERS = f"{MINIO_SILVER_BUCKET}/orders"
+MINIO_SILVER_GOOGLE_ADS = f"{MINIO_SILVER_BUCKET}/google_ads"
+MINIO_SILVER_SOCIAL_ADS = f"{MINIO_SILVER_BUCKET}/social_ads"
+MINIO_SILVER_INFLUENCER = f"{MINIO_SILVER_BUCKET}/influencer"
+MINIO_SILVER_ALL_PLATFORMS = f"{MINIO_SILVER_BUCKET}/all_platforms"
+MINIO_SILVER_ATTRIBUTION = f"{MINIO_SILVER_BUCKET}/marketing_attribution"
+MINIO_SILVER_CHANNEL_PERFORMANCE = f"{MINIO_SILVER_BUCKET}/channel_performance"
 
 def get_date_to_process(date_arg=None):
     """Determine the date to process from argument or default to yesterday"""
@@ -54,12 +73,16 @@ def load_web_sessions(start_date, end_date):
     
     try:
         # Read all sessions from silver
-        all_sessions = spark.read.parquet("/data/silver/web_sessions")
+        all_sessions = spark.read.parquet(MINIO_SILVER_WEB_SESSIONS)
+        
+        # Convert dates to strings for filtering
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
         
         # Filter for date range
         filtered_sessions = all_sessions.filter(
-            (col("date") >= start_date.strftime('%Y-%m-%d')) & 
-            (col("date") <= end_date.strftime('%Y-%m-%d'))
+            (col("date") >= start_date_str) & 
+            (col("date") <= end_date_str)
         )
         
         session_count = filtered_sessions.count()
@@ -67,8 +90,80 @@ def load_web_sessions(start_date, end_date):
         
         return filtered_sessions
     except Exception as e:
-        print(f"Error loading web sessions: {e}")
-        return None
+        print(f"Error loading web sessions from MinIO: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_silver_path = "/data/silver/web_sessions"
+            print(f"Attempting to read from local path: {local_silver_path}")
+            
+            all_sessions = spark.read.parquet(local_silver_path)
+            
+            # Convert dates to strings for filtering
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Filter for date range
+            filtered_sessions = all_sessions.filter(
+                (col("date") >= start_date_str) & 
+                (col("date") <= end_date_str)
+            )
+            
+            session_count = filtered_sessions.count()
+            print(f"Loaded {session_count} web sessions from local Silver")
+            
+            return filtered_sessions
+        except Exception as e2:
+            print(f"Error loading web sessions from local Silver: {e2}")
+            return None
+
+def load_customer_sessions(start_date, end_date):
+    """Load customer sessions from Silver for the date range"""
+    print(f"Loading customer sessions from {start_date} to {end_date}")
+    
+    try:
+        # Read all sessions from silver
+        all_sessions = spark.read.parquet(MINIO_SILVER_CUSTOMER_SESSIONS)
+        
+        # Convert dates to strings for filtering
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
+        
+        # Filter for date range
+        filtered_sessions = all_sessions.filter(
+            (col("date") >= start_date_str) & 
+            (col("date") <= end_date_str)
+        )
+        
+        session_count = filtered_sessions.count()
+        print(f"Loaded {session_count} customer sessions from Silver")
+        
+        return filtered_sessions
+    except Exception as e:
+        print(f"Error loading customer sessions from MinIO: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_silver_path = "/data/silver/customer_sessions"
+            print(f"Attempting to read from local path: {local_silver_path}")
+            
+            all_sessions = spark.read.parquet(local_silver_path)
+            
+            # Convert dates to strings for filtering
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Filter for date range
+            filtered_sessions = all_sessions.filter(
+                (col("date") >= start_date_str) & 
+                (col("date") <= end_date_str)
+            )
+            
+            session_count = filtered_sessions.count()
+            print(f"Loaded {session_count} customer sessions from local Silver")
+            
+            return filtered_sessions
+        except Exception as e2:
+            print(f"Error loading customer sessions from local Silver: {e2}")
+            return None
 
 def load_orders(start_date, end_date):
     """Load orders from Silver for the date range"""
@@ -76,7 +171,7 @@ def load_orders(start_date, end_date):
     
     try:
         # Read all orders from silver
-        all_orders = spark.read.parquet("/data/silver/orders")
+        all_orders = spark.read.parquet(MINIO_SILVER_ORDERS)
         
         # Convert dates to strings for comparison
         start_date_str = start_date.strftime('%Y-%m-%d')
@@ -93,8 +188,31 @@ def load_orders(start_date, end_date):
         
         return filtered_orders
     except Exception as e:
-        print(f"Error loading orders: {e}")
-        return None
+        print(f"Error loading orders from MinIO: {e}")
+        # Try local filesystem as fallback
+        try:
+            local_silver_path = "/data/silver/orders"
+            print(f"Attempting to read from local path: {local_silver_path}")
+            
+            all_orders = spark.read.parquet(local_silver_path)
+            
+            # Convert dates to strings for comparison
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Filter for date range
+            filtered_orders = all_orders.filter(
+                (to_date(col("order_date")) >= start_date_str) &
+                (to_date(col("order_date")) <= end_date_str)
+            )
+            
+            order_count = filtered_orders.count()
+            print(f"Loaded {order_count} orders from local Silver")
+            
+            return filtered_orders
+        except Exception as e2:
+            print(f"Error loading orders from local Silver: {e2}")
+            return None
 
 def load_ad_data(start_date, end_date):
     """Load advertising data from Silver for the date range"""
@@ -102,10 +220,10 @@ def load_ad_data(start_date, end_date):
     
     try:
         # Read from silver
-        google_ads = spark.read.parquet("/data/silver/google_ads")
-        social_ads = spark.read.parquet("/data/silver/social_ads")
-        influencer = spark.read.parquet("/data/silver/influencer")
-        all_platforms = spark.read.parquet("/data/silver/all_platforms")
+        google_ads = spark.read.parquet(MINIO_SILVER_GOOGLE_ADS)
+        social_ads = spark.read.parquet(MINIO_SILVER_SOCIAL_ADS)
+        influencer = spark.read.parquet(MINIO_SILVER_INFLUENCER)
+        all_platforms = spark.read.parquet(MINIO_SILVER_ALL_PLATFORMS)
         
         # Convert dates to strings for comparison
         start_date_str = start_date.strftime('%Y-%m-%d')
@@ -113,23 +231,23 @@ def load_ad_data(start_date, end_date):
         
         # Filter for date range
         filtered_google = google_ads.filter(
-            (to_date(col("date")) >= start_date_str) &
-            (to_date(col("date")) <= end_date_str)
+            (to_date(col("ad_date")) >= start_date_str) &
+            (to_date(col("ad_date")) <= end_date_str)
         )
         
         filtered_social = social_ads.filter(
-            (to_date(col("date")) >= start_date_str) &
-            (to_date(col("date")) <= end_date_str)
+            (to_date(col("ad_date")) >= start_date_str) &
+            (to_date(col("ad_date")) <= end_date_str)
         )
         
         filtered_influencer = influencer.filter(
-            (to_date(col("date")) >= start_date_str) &
-            (to_date(col("date")) <= end_date_str)
+            (to_date(col("ad_date")) >= start_date_str) &
+            (to_date(col("ad_date")) <= end_date_str)
         )
         
         filtered_all = all_platforms.filter(
-            (to_date(col("date")) >= start_date_str) &
-            (to_date(col("date")) <= end_date_str)
+            (to_date(col("ad_date")) >= start_date_str) &
+            (to_date(col("ad_date")) <= end_date_str)
         )
         
         # Print counts
@@ -147,10 +265,49 @@ def load_ad_data(start_date, end_date):
             "all_platforms": filtered_all
         }
     except Exception as e:
-        print(f"Error loading advertising data: {e}")
-        return None
+        print(f"Error loading advertising data from MinIO: {e}")
+        # Try local filesystem as fallback
+        try:
+            # Load from local paths
+            local_paths = {
+                "google_ads": "/data/silver/google_ads",
+                "social_ads": "/data/silver/social_ads",
+                "influencer": "/data/silver/influencer",
+                "all_platforms": "/data/silver/all_platforms"
+            }
+            
+            result = {}
+            
+            for key, path in local_paths.items():
+                print(f"Attempting to read {key} from local path: {path}")
+                df = spark.read.parquet(path)
+                
+                # Convert dates to strings for comparison
+                start_date_str = start_date.strftime('%Y-%m-%d')
+                end_date_str = end_date.strftime('%Y-%m-%d')
+                
+                # Filter for date range
+                if "ad_date" in df.columns:
+                    filtered_df = df.filter(
+                        (to_date(col("ad_date")) >= start_date_str) &
+                        (to_date(col("ad_date")) <= end_date_str)
+                    )
+                else:
+                    # Date column might be different
+                    filtered_df = df.filter(
+                        (to_date(col("date")) >= start_date_str) &
+                        (to_date(col("date")) <= end_date_str)
+                    )
+                
+                result[key] = filtered_df
+                print(f"Loaded {filtered_df.count()} {key} records from local Silver")
+            
+            return result
+        except Exception as e2:
+            print(f"Error loading advertising data from local Silver: {e2}")
+            return None
 
-def create_customer_journeys(web_sessions, orders):
+def create_customer_journeys(web_sessions, customer_sessions, orders):
     """Create customer journeys by joining web sessions with orders"""
     print("Creating customer journeys")
     
@@ -159,24 +316,37 @@ def create_customer_journeys(web_sessions, orders):
         return None
     
     try:
-        # Filter for authenticated sessions with user_id
-        authenticated_sessions = web_sessions.filter(col("is_authenticated") == True)
+        # Combine web sessions and customer sessions
+        all_sessions = web_sessions
+        if customer_sessions is not None:
+            all_sessions = web_sessions.union(customer_sessions)
+        
+        # Filter for sessions with marketing attribution data
+        sessions_with_attribution = all_sessions.filter(
+            col("utm_source").isNotNull() | 
+            col("utm_medium").isNotNull() | 
+            col("utm_campaign").isNotNull() |
+            col("campaign_id").isNotNull()
+        )
+        
+        attr_session_count = sessions_with_attribution.count()
+        print(f"Found {attr_session_count} sessions with marketing attribution data")
         
         # Window for ordering sessions by user and timestamp
         user_window = Window.partitionBy("user_id").orderBy("session_start")
         
         # Add sequence number to sessions
-        sequenced_sessions = authenticated_sessions \
+        sequenced_sessions = sessions_with_attribution \
             .withColumn("session_seq", row_number().over(user_window))
         
-        # Get orders with user_id
-        user_orders = orders.filter(col("customer_id").isNotNull())
+        # Get orders
+        valid_orders = orders.filter(col("customer_id").isNotNull())
         
         # Window for ordering orders by user and date
         order_window = Window.partitionBy("customer_id").orderBy("order_date")
         
         # Add sequence number to orders
-        sequenced_orders = user_orders \
+        sequenced_orders = valid_orders \
             .withColumn("order_seq", row_number().over(order_window))
         
         # Join sessions and orders for user journeys
@@ -504,11 +674,12 @@ def create_marketing_attribution(process_date, days_back=30):
     
     # Load data
     web_sessions = load_web_sessions(start_date, end_date)
+    customer_sessions = load_customer_sessions(start_date, end_date)
     orders = load_orders(start_date, end_date)
     ad_data = load_ad_data(start_date, end_date)
     
     # Create customer journeys
-    journey_metrics = create_customer_journeys(web_sessions, orders)
+    journey_metrics = create_customer_journeys(web_sessions, customer_sessions, orders)
     
     # Create attribution models
     attribution_data = create_attribution_models(journey_metrics)
@@ -518,46 +689,13 @@ def create_marketing_attribution(process_date, days_back=30):
     
     # Save attribution data to Silver
     if attribution_data is not None:
-        # Partition by model and date
-        attribution_data \
-            .withColumn("year", year(col("order_date"))) \
-            .withColumn("month", month(col("order_date"))) \
-            .withColumn("day", dayofmonth(col("order_date"))) \
-            .write \
-            .format("parquet") \
-            .mode("overwrite") \
-            .partitionBy("attribution_model", "year", "month") \
-            .save("/data/silver/marketing_attribution")
-        
-        print(f"Saved attribution data to Silver")
-    
-    # Save channel performance to Silver
-    if channel_performance is not None:
-        # Add date partitioning 
-        processing_year = process_date.year
-        processing_month = process_date.month
-        processing_day = process_date.day
-        
-        channel_performance \
-            .withColumn("year", lit(processing_year)) \
-            .withColumn("month", lit(processing_month)) \
-            .withColumn("day", lit(processing_day)) \
-            .write \
-            .format("parquet") \
-            .mode("overwrite") \
-            .partitionBy("attribution_model", "year", "month") \
-            .save("/data/silver/channel_performance")
-        
-        print(f"Saved channel performance data to Silver")
-    
-    return (attribution_data is not None) and (channel_performance is not None)
-
-if __name__ == "__main__":
-    # Get date from command line arguments or use default
-    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    process_date = get_date_to_process(date_arg)
-    
-    # Default lookback period for attribution
-    days_back = int(sys.argv[2]) if len(sys.argv) > 2 else 30
-    
-    create_marketing_attribution(process_date, days_back)
+        try:
+            # Partition by model and date
+            attribution_data \
+                .withColumn("year", year(col("order_date"))) \
+                .withColumn("month", month(col("order_date"))) \
+                .withColumn("day", dayofmonth(col("order_date"))) \
+                .write \
+                .format("parquet") \
+                .mode("overwrite") \
+                .partitionBy("attribution_model", "year", "month")
