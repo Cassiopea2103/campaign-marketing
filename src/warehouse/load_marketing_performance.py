@@ -2,7 +2,7 @@
 load_marketing_performance.py - Extracts marketing performance data from Gold layer and loads it to Snowflake
 
 This script:
-1. Reads the marketing performance data from the Gold zone using the correct paths
+1. Reads the marketing performance data from the Gold zone (MinIO/S3)
 2. Performs any necessary final transformations
 3. Loads the data into Snowflake data warehouse tables
 4. Creates a summary of the load process
@@ -37,21 +37,19 @@ spark = SparkSession.builder \
 # Set log level to reduce noise
 spark.sparkContext.setLogLevel("WARN")
 
-# Define storage paths based on the actual structure in MinIO
+# Define storage paths
 MINIO_GOLD_BUCKET = "s3a://gold"
-# Paths discovered in MinIO console
-MINIO_GOLD_ACQUISITION_METRICS = f"{MINIO_GOLD_BUCKET}/acquisition_metrics"
 MINIO_GOLD_MARKETING_PERFORMANCE = f"{MINIO_GOLD_BUCKET}/marketing_performance"
 MINIO_GOLD_CAMPAIGN_ROI = f"{MINIO_GOLD_BUCKET}/campaign_roi"
 
-# Snowflake connection parameters (simulation for this project)
+# Snowflake connection parameters
 SNOWFLAKE_OPTIONS = {
-    "sfUrl": "your-snowflake-account.snowflakecomputing.com",
-    "sfUser": "MARKETING_ETL_USER",
-    "sfPassword": "{{snowflake_password}}",  # In production, use Airflow Variable or secret
-    "sfDatabase": "MARKETING_DATA",
+    "sfUrl": "http://zcyqnos-ia60918.snowflakecomputing.com/",
+    "sfUser": "CASSIOPEA2103",
+    "sfPassword": "Saliou2103wade@", 
+    "sfDatabase": "SNOWFLAKE",
     "sfSchema": "PUBLIC",
-    "sfWarehouse": "MARKETING_WH"
+    "sfWarehouse": "SNOWFLAKE_LEARNING_WH"
 }
 
 def get_date_to_process(date_arg=None):
@@ -135,187 +133,215 @@ def load_marketing_performance(process_date):
     
     print(f"Loading marketing performance data for {date_str}")
     
-    # Load channel comparison data from Gold (using the correct path structure)
-    channel_comparison_path = f"{MINIO_GOLD_MARKETING_PERFORMANCE}/channel_comparison/attribution_model=first_touch/year={year_str}/month={month_str}"
+    # Load channel rankings data from Gold
+    channel_rankings_path = f"{MINIO_GOLD_MARKETING_PERFORMANCE}/channel_rankings/year={year_str}/month={month_str}"
+    channel_rankings = load_data_from_gold(channel_rankings_path, "channel rankings")
+    
+    # Load trend analysis data from Gold
+    trend_analysis_path = f"{MINIO_GOLD_MARKETING_PERFORMANCE}/trend_analysis/year={year_str}/month={month_str}"
+    trend_analysis = load_data_from_gold(trend_analysis_path, "trend analysis")
+    
+    # Load channel comparison data from Gold
+    channel_comparison_path = f"{MINIO_GOLD_MARKETING_PERFORMANCE}/channel_comparison/year={year_str}/month={month_str}"
     channel_comparison = load_data_from_gold(channel_comparison_path, "channel comparison")
     
-    # Try alternate attribution models if first_touch doesn't exist
-    if channel_comparison is None:
-        alt_paths = [
-            f"{MINIO_GOLD_MARKETING_PERFORMANCE}/channel_comparison/attribution_model=last_touch/year={year_str}/month={month_str}",
-            f"{MINIO_GOLD_MARKETING_PERFORMANCE}/channel_comparison/attribution_model=linear/year={year_str}/month={month_str}"
-        ]
-        for path in alt_paths:
-            channel_comparison = load_data_from_gold(path, "channel comparison (alternate model)")
-            if channel_comparison is not None:
-                break
-    
-    # Load campaign ROI channel comparison data
-    campaign_roi_channel_path = f"{MINIO_GOLD_CAMPAIGN_ROI}/channel_comparison/time_period=daily/year={year_str}/month={month_str}"
-    campaign_roi_channel = load_data_from_gold(campaign_roi_channel_path, "campaign ROI channel comparison")
-    
-    # Try other time periods if daily doesn't exist
-    if campaign_roi_channel is None:
-        alt_periods = ["monthly", "weekly", "quarterly"]
-        for period in alt_periods:
-            path = f"{MINIO_GOLD_CAMPAIGN_ROI}/channel_comparison/time_period={period}/year={year_str}/month={month_str}"
-            campaign_roi_channel = load_data_from_gold(path, f"campaign ROI channel comparison ({period})")
-            if campaign_roi_channel is not None:
-                break
-    
-    # Load acquisition metrics
-    acquisition_path = f"{MINIO_GOLD_ACQUISITION_METRICS}/acquisition_source/time_period=daily/year={year_str}/month={month_str}"
-    acquisition_metrics = load_data_from_gold(acquisition_path, "acquisition metrics")
-    
-    # Try other time periods if daily doesn't exist
-    if acquisition_metrics is None:
-        alt_periods = ["monthly", "weekly", "quarterly"]
-        for period in alt_periods:
-            path = f"{MINIO_GOLD_ACQUISITION_METRICS}/acquisition_source/time_period={period}/year={year_str}/month={month_str}"
-            acquisition_metrics = load_data_from_gold(path, f"acquisition metrics ({period})")
-            if acquisition_metrics is not None:
-                break
+    # Load campaign ROI data
+    campaign_performance_path = f"{MINIO_GOLD_CAMPAIGN_ROI}/campaign_performance/time_period=monthly/year={year_str}/month={month_str}"
+    campaign_performance = load_data_from_gold(campaign_performance_path, "campaign performance")
     
     success = True
     
-    # Process and load channel comparison data to Snowflake
+    # Transform and load channel rankings to Snowflake fact table
+    if channel_rankings is not None:
+        # Select and rename columns for warehouse schema
+        channel_rankings_fact = channel_rankings.select(
+            col("utm_source").alias("source"),
+            col("utm_medium").alias("medium"),
+            col("utm_campaign").alias("campaign"),
+            col("attribution_model").alias("attribution_model"),
+            col("time_period").alias("time_period"),
+            "start_date",
+            "end_date",
+            "conversions",
+            "revenue",
+            "unique_orders",
+            "unique_users",
+            "total_cost",
+            "total_impressions",
+            "total_clicks",
+            "roas",
+            "roi",
+            "cpa",
+            "cpc",
+            "conversion_rate",
+            "roi_rank",
+            "roas_rank",
+            "revenue_rank",
+            "conversion_rank",
+            "performance_score",
+            "performance_tier",
+            "processing_date"
+        )
+        
+        # Load to Snowflake
+        success = success and load_to_snowflake(
+            channel_rankings_fact,
+            "MARKETING_CHANNEL_PERFORMANCE_FACT",
+            "append"
+        )
+    
+    # Transform and load trend analysis to Snowflake
+    if trend_analysis is not None:
+        # Select and rename columns for warehouse schema
+        trend_analysis_fact = trend_analysis.select(
+            col("attribution_model").alias("attribution_model"),
+            col("utm_source").alias("source"),
+            col("utm_medium").alias("medium"),
+            col("utm_campaign").alias("campaign"),
+            col("time_period").alias("time_period"),
+            "current_conversions",
+            "current_revenue",
+            "previous_conversions",
+            "previous_revenue",
+            "conversion_change",
+            "conversion_change_pct",
+            "revenue_change",
+            "revenue_change_pct",
+            "current_start_date",
+            "current_end_date",
+            "previous_start_date",
+            "previous_end_date",
+            "revenue_trend",
+            "processing_date"
+        )
+        
+        # Load to Snowflake
+        success = success and load_to_snowflake(
+            trend_analysis_fact,
+            "MARKETING_TREND_ANALYSIS_FACT",
+            "append"
+        )
+    
+    # Transform and load channel comparison to Snowflake
     if channel_comparison is not None:
-        # Select and process relevant columns
-        # Adjust column selection based on actual schema
-        try:
-            channel_comparison_fact = channel_comparison.select(
-                "*"  # Initially select all columns to see what's available
-            )
-            # Show schema to understand the actual data structure
-            print("Channel comparison schema:")
-            channel_comparison_fact.printSchema()
-            
-            # Now select specific columns based on the schema
-            available_columns = channel_comparison_fact.columns
-            required_columns = [
-                "utm_source", "utm_medium", "revenue", "conversions", 
-                "total_cost", "total_impressions", "total_clicks",
-                "roas", "roi", "processing_date"
-            ]
-            
-            # Filter to only columns that actually exist
-            selected_columns = [col for col in required_columns if col in available_columns]
-            
-            # Add any missing columns as nulls
-            for column in required_columns:
-                if column not in selected_columns:
-                    channel_comparison_fact = channel_comparison_fact.withColumn(column, lit(None))
-            
-            # Final select with all required columns
-            channel_comparison_fact = channel_comparison_fact.select(*required_columns)
-            
-            # Load to Snowflake
-            success = success and load_to_snowflake(
-                channel_comparison_fact,
-                "MARKETING_CHANNEL_PERFORMANCE_FACT",
-                "append"
-            )
-        except Exception as e:
-            print(f"Error processing channel comparison data: {e}")
+        # Select and rename columns for warehouse schema
+        channel_comparison_fact = channel_comparison.select(
+            col("attribution_model").alias("attribution_model"),
+            col("utm_source").alias("source"),
+            col("utm_medium").alias("medium"),
+            "conversions",
+            "revenue",
+            "campaign_count",
+            "unique_orders",
+            "unique_users",
+            "total_cost",
+            "total_impressions",
+            "total_clicks",
+            "roas",
+            "roi",
+            "cpa",
+            "cpc",
+            "conversion_rate",
+            "channel_revenue_percentage",
+            "channel_conversion_percentage",
+            "channel_cost_percentage",
+            "channel_efficiency_index",
+            "processing_date"
+        )
+        
+        # Load to Snowflake
+        success = success and load_to_snowflake(
+            channel_comparison_fact,
+            "MARKETING_CHANNEL_COMPARISON_FACT",
+            "append"
+        )
     
-    # Process and load campaign ROI data to Snowflake
-    if campaign_roi_channel is not None:
-        try:
-            # Show schema to understand the actual data structure
-            print("Campaign ROI channel schema:")
-            campaign_roi_channel.printSchema()
-            
-            # Select columns based on the schema
-            campaign_roi_fact = campaign_roi_channel.select("*")
-            
-            # Load to Snowflake
-            success = success and load_to_snowflake(
-                campaign_roi_fact,
-                "MARKETING_CAMPAIGN_ROI_FACT",
-                "append"
-            )
-        except Exception as e:
-            print(f"Error processing campaign ROI data: {e}")
+    # Transform and load campaign performance to Snowflake
+    if campaign_performance is not None:
+        # Select and rename columns for warehouse schema
+        campaign_performance_fact = campaign_performance.select(
+            "campaign_name",
+            "platform",
+            "category",
+            "attribution_model",
+            "time_period",
+            "start_date",
+            "end_date",
+            "orders",
+            "customers",
+            "attributed_revenue",
+            "avg_order_value",
+            "total_cost",
+            "impressions",
+            "clicks",
+            "tracked_conversions",
+            "roas",
+            "roi",
+            "ctr",
+            "cpc",
+            "cpa",
+            "conversion_rate",
+            "period_revenue",
+            "period_cost",
+            "period_orders",
+            "period_customers",
+            "period_impressions",
+            "period_clicks",
+            "period_tracked_conversions",
+            "period_roas",
+            "period_roi",
+            "roi_rank",
+            "revenue_rank",
+            "roi_classification",
+            "processing_date"
+        )
+        
+        # Load to Snowflake
+        success = success and load_to_snowflake(
+            campaign_performance_fact,
+            "MARKETING_CAMPAIGN_PERFORMANCE_FACT",
+            "append"
+        )
     
-    # Process and load acquisition metrics to Snowflake
-    if acquisition_metrics is not None:
+    # Create a summary dimension table with latest metrics
+    if channel_comparison is not None and campaign_performance is not None:
         try:
-            # Show schema to understand the actual data structure
-            print("Acquisition metrics schema:")
-            acquisition_metrics.printSchema()
-            
-            # Select columns based on the schema
-            acquisition_fact = acquisition_metrics.select("*")
-            
-            # Load to Snowflake
-            success = success and load_to_snowflake(
-                acquisition_fact,
-                "MARKETING_ACQUISITION_FACT",
-                "append"
+            # Get total metrics for summary
+            total_spend = channel_comparison.groupBy().agg(
+                sum("total_cost").alias("total_marketing_spend"),
+                sum("revenue").alias("total_attributed_revenue")
             )
-        except Exception as e:
-            print(f"Error processing acquisition metrics: {e}")
-    
-    # Create a summary if we have any data
-    if channel_comparison is not None or campaign_roi_channel is not None or acquisition_metrics is not None:
-        try:
-            # Create combined metrics for summary
-            metrics = []
             
-            if channel_comparison is not None:
-                channel_metrics = channel_comparison.agg(
-                    sum("revenue").alias("total_revenue"),
-                    sum("total_cost").alias("total_channel_cost"),
-                    avg("roi").alias("avg_channel_roi")
-                ).collect()[0]
-                
-                metrics.append(("Channel Revenue", channel_metrics["total_revenue"]))
-                metrics.append(("Channel Cost", channel_metrics["total_channel_cost"]))
-                metrics.append(("Average ROI", channel_metrics["avg_channel_roi"]))
+            # Get top performing campaigns
+            top_campaigns = campaign_performance.filter(col("roi_rank") <= 5).select(
+                "campaign_name", "platform", "roi", "attributed_revenue"
+            )
             
-            if campaign_roi_channel is not None:
-                # Adjust column names based on actual schema
-                campaign_roi_metrics = campaign_roi_channel.agg(
-                    sum("channel_revenue").alias("total_campaign_revenue") if "channel_revenue" in campaign_roi_channel.columns else lit(0).alias("total_campaign_revenue"),
-                    sum("channel_cost").alias("total_campaign_cost") if "channel_cost" in campaign_roi_channel.columns else lit(0).alias("total_campaign_cost")
-                ).collect()[0]
-                
-                metrics.append(("Campaign Revenue", campaign_roi_metrics["total_campaign_revenue"]))
-                metrics.append(("Campaign Cost", campaign_roi_metrics["total_campaign_cost"]))
+            # Convert to string for summary table
+            from pyspark.sql.functions import collect_list, concat_ws
+            top_campaigns_str = top_campaigns.groupBy().agg(
+                concat_ws(", ", collect_list("campaign_name")).alias("top_performing_campaigns")
+            )
             
-            if acquisition_metrics is not None:
-                # Adjust column names based on actual schema
-                acquisition_summary = acquisition_metrics.agg(
-                    sum("customer_count").alias("total_customers") if "customer_count" in acquisition_metrics.columns else lit(0).alias("total_customers"),
-                    avg("cost_per_acquisition").alias("avg_cpa") if "cost_per_acquisition" in acquisition_metrics.columns else lit(0).alias("avg_cpa")
-                ).collect()[0]
-                
-                metrics.append(("Total Customers", acquisition_summary["total_customers"]))
-                metrics.append(("Average CPA", acquisition_summary["avg_cpa"]))
+            # Create summary row
+            summary = total_spend.crossJoin(top_campaigns_str).withColumn(
+                "summary_date", lit(date_str)
+            ).withColumn(
+                "overall_marketing_roi", 
+                when(col("total_marketing_spend") > 0,
+                    (col("total_attributed_revenue") - col("total_marketing_spend")) / col("total_marketing_spend")
+                ).otherwise(0)
+            )
             
-            # Create a summary dataframe
-            from pyspark.sql.types import StructType, StructField, StringType, DoubleType
-            
-            schema = StructType([
-                StructField("metric_name", StringType(), True),
-                StructField("metric_value", DoubleType(), True),
-                StructField("report_date", StringType(), True)
-            ])
-            
-            summary_data = [(name, float(value) if value is not None else 0.0, date_str) for name, value in metrics]
-            summary_df = spark.createDataFrame(summary_data, schema)
-            
-            # Load the summary to Snowflake
+            # Load summary to Snowflake
             success = success and load_to_snowflake(
-                summary_df,
+                summary,
                 "MARKETING_PERFORMANCE_SUMMARY",
                 "append"
             )
             
         except Exception as e:
             print(f"Error creating summary: {e}")
-    else:
-        print("No data found for creating summary")
     
     return success
 
