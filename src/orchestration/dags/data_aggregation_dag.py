@@ -125,8 +125,9 @@ create_campaign_roi = SparkSubmitOperator(
     application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
-        'spark.driver.memory': '1g',
-        'spark.executor.memory': '1g',
+        'spark.driver.memory': '3g',
+        'spark.executor.memory': '3g',
+        'spark.executor.cores': '3'
     },
     jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,

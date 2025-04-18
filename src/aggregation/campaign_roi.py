@@ -251,28 +251,40 @@ def create_campaign_performance_metrics(attribution_data, ad_data, date_ranges):
         time_period_metrics = []
         
         for period_name, (start_date, end_date) in date_ranges.items():
+            if period_name == "quarterly":
+                print(f"Skipping {period_name} metrics due to performance concerns")
+                continue
+    
             print(f"Processing {period_name} metrics from {start_date} to {end_date}")
             
             # Convert dates to strings for filtering
             start_date_str = start_date.strftime('%Y-%m-%d')
             end_date_str = end_date.strftime('%Y-%m-%d')
-            
-            # Filter attribution data for this period
-            period_attribution = None
+
+            # Pre-filter the data before expensive operations
             if attribution_data is not None:
-                period_attribution = attribution_data \
+                filtered_attribution = attribution_data \
                     .filter(
                         (to_date(col("order_date")) >= start_date_str) & 
                         (to_date(col("order_date")) <= end_date_str) &
                         col("utm_campaign").isNotNull()
-                    ) \
-                    .groupBy("utm_campaign", "attribution_model") \
-                    .agg(
-                        countDistinct("order_id").alias("period_orders"),
-                        countDistinct("user_id").alias("period_customers"),
-                        sum("attributed_revenue").alias("period_revenue"),
-                        avg("attributed_revenue").alias("period_aov")
                     )
+            
+            # Filter attribution data for this period
+            import pyspark.sql.functions as F
+            period_attribution = filtered_attribution \
+                .filter(
+                    (to_date(col("order_date")) >= start_date_str) & 
+                    (to_date(col("order_date")) <= end_date_str) &
+                    col("utm_campaign").isNotNull()
+                ) \
+                .groupBy("utm_campaign", "attribution_model") \
+                .agg(
+                    F.approx_count_distinct("order_id").alias("period_orders"),
+                    F.approx_count_distinct("user_id").alias("period_customers"),
+                    sum("attributed_revenue").alias("period_revenue"),
+                    avg("attributed_revenue").alias("period_aov")
+                )
             
             # Filter ad spend data for this period
             period_ad_spend = None
@@ -294,9 +306,13 @@ def create_campaign_performance_metrics(attribution_data, ad_data, date_ranges):
                     )
             
             # Join period data
+            from pyspark.sql.functions import broadcast
+
             if period_attribution is not None and period_ad_spend is not None:
                 # Rename for consistent joining
                 period_attribution = period_attribution.withColumnRenamed("utm_campaign", "campaign_name")
+                
+
                 
                 # Join attribution and ad spend
                 period_metrics = period_attribution.join(
@@ -344,7 +360,7 @@ def create_campaign_performance_metrics(attribution_data, ad_data, date_ranges):
             campaign_roi = campaign_performance.join(
                 all_periods.select(
                     "campaign_name",
-                    "attribution_model",
+                    col("attribution_model").alias("period_attribution_model"),  # Rename to avoid ambiguity
                     "time_period",
                     "start_date",
                     "end_date",
@@ -363,9 +379,10 @@ def create_campaign_performance_metrics(attribution_data, ad_data, date_ranges):
             )
             
             # Calculate performance rank
-            # Create window for each time period and attribution model
-            roi_window = Window.partitionBy("time_period", "attribution_model").orderBy(col("period_roi").desc_nulls_last())
-            revenue_window = Window.partitionBy("time_period", "attribution_model").orderBy(col("period_revenue").desc_nulls_last())
+            ## Specify the source of attribution_model
+            roi_window = Window.partitionBy("time_period", "period_attribution_model").orderBy(col("period_roi").desc_nulls_last())
+            #roi_window = Window.partitionBy("time_period", "all_periods.attribution_model").orderBy(col("period_roi").desc_nulls_last())
+            revenue_window = Window.partitionBy("time_period", "period_attribution_model").orderBy(col("period_revenue").desc_nulls_last())
             
             # Add rankings
             campaign_roi = campaign_roi \
@@ -471,10 +488,11 @@ def create_campaign_roi_time_trends(campaign_roi):
         # Filter for monthly data with valid ROI
         monthly_data = campaign_roi \
             .filter(
-                col("time_period") == "monthly" & 
-                col("campaign_name").isNotNull() & 
-                col("period_roi").isNotNull()
+                (col("time_period") == "monthly") & 
+                (col("campaign_name").isNotNull()) & 
+                (col("period_roi").isNotNull())
             )
+        
         
         if monthly_data.count() == 0:
             print("No monthly data available for trend analysis")
@@ -750,9 +768,9 @@ def create_budget_allocation_analysis(campaign_roi):
     try:
         # Use monthly performance data with valid ROI and cost
         monthly_data = campaign_roi.filter(
-            col("time_period") == "monthly" & 
-            col("period_roi").isNotNull() & 
-            col("period_cost").isNotNull()
+            (col("time_period") == "monthly") & 
+            (col("period_roi").isNotNull()) & 
+            (col("period_cost").isNotNull())
         )
         
         if monthly_data.count() == 0:
@@ -903,6 +921,10 @@ def create_campaign_roi_gold(process_date):
     ad_data = load_ad_data()
     orders_data = load_orders_data()
     customers_data = load_customers_data()
+
+    if attribution_data is not None:
+        attribution_data = attribution_data.repartition(col("order_date"))
+
     
     # Process data and create gold tables
     
