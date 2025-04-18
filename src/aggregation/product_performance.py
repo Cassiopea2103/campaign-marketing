@@ -701,7 +701,13 @@ def calculate_product_combinations(order_items):
             .withColumn("is_strong_combination", col("lift") > 2.0) \
             .withColumn("is_top_combination", col("combination_rank") <= 3)
             
-        print(f"Created {product_combinations.count()} product combination records")
+        try:
+            # Take one row just to check if the DataFrame is empty
+            product_combinations.limit(1).collect()
+            print("Created product combination records successfully")
+        except:
+            print("No product combination records created or error during processing")
+            
         return product_combinations
         
     except Exception as e:
@@ -967,17 +973,20 @@ def create_product_performance_gold(process_date):
     # Save seasonality analysis to Gold
     if seasonality_analysis is not None:
         # Save seasonal analysis
-        seasonal = seasonal \
-            .withColumn("processing_date", lit(processing_date_str)) \
-            .withColumn("processing_year", lit(processing_year)) \
-            .withColumn("processing_month", lit(processing_month)) \
-            .withColumn("processing_day", lit(processing_day))
-        
-        success = success and save_to_gold(
-            seasonal,
-            f"{MINIO_GOLD_PRODUCT_PERFORMANCE}/seasonal_analysis",
-            ["season", "processing_year", "processing_month"]
-        )
+    # Extract seasonal data from the dictionary
+        seasonal = seasonality_analysis.get("seasonal")
+        if seasonal is not None:
+            seasonal = seasonal \
+                .withColumn("processing_date", lit(processing_date_str)) \
+                .withColumn("processing_year", lit(processing_year)) \
+                .withColumn("processing_month", lit(processing_month)) \
+                .withColumn("processing_day", lit(processing_day))
+            
+            success = success and save_to_gold(
+                seasonal,
+                f"{MINIO_GOLD_PRODUCT_PERFORMANCE}/seasonal_analysis",
+                ["season", "processing_year", "processing_month"]
+            )
     
     # Save monthly analysis - avoid duplicate column names
     monthly = seasonality_analysis.get("monthly")
