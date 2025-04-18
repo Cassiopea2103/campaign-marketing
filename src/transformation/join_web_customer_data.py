@@ -64,22 +64,14 @@ def get_date_to_process(date_arg=None):
     yesterday = datetime.now() - timedelta(days=1)
     return yesterday
 
-def load_web_logs(date_str=None):
+def load_web_logs():
     """Load web logs from Silver zone"""
     try:
         print("Loading web logs from Silver zone")
         
         # If date specified, load only that partition
-        if date_str:
-            web_logs_path = f"{MINIO_SILVER_WEB_LOGS}/date={date_str}"
-            if not spark._jvm.org.apache.hadoop.fs.Path(web_logs_path).getFileSystem(
-                spark._jsc.hadoopConfiguration()).exists(
-                spark._jvm.org.apache.hadoop.fs.Path(web_logs_path)):
-                print(f"No data found for date {date_str}, loading all available data")
-                web_logs_path = MINIO_SILVER_WEB_LOGS
-        else:
-            web_logs_path = MINIO_SILVER_WEB_LOGS
-            
+        
+        web_logs_path = MINIO_SILVER_WEB_LOGS
         web_logs = spark.read.parquet(web_logs_path)
         
         # Log count and sample data
@@ -423,7 +415,7 @@ def process_web_customer_data(date_arg=None):
     print(f"Processing web and customer data for {date_str}")
     
     # Load data
-    web_logs = load_web_logs(date_str)
+    web_logs = load_web_logs()
     customers = load_customer_data()
     
     # Create web sessions

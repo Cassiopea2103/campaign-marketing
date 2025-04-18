@@ -55,7 +55,7 @@ wait_for_transformation = ExternalTaskSensor(
 # Marketing performance metrics by channel and campaign
 create_marketing_performance = SparkSubmitOperator(
     task_id='create_marketing_performance',
-    application='/src/etl/aggregation/marketing_performance.py',
+    application='/src/aggregation/marketing_performance.py',
     name='marketing_performance',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -64,13 +64,14 @@ create_marketing_performance = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Product performance metrics
 create_product_performance = SparkSubmitOperator(
     task_id='create_product_performance',
-    application='/src/etl/aggregation/product_performance.py',
+    application='/src/aggregation/product_performance.py',
     name='product_performance',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -79,13 +80,14 @@ create_product_performance = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Customer segmentation
 create_customer_segments = SparkSubmitOperator(
     task_id='create_customer_segments',
-    application='/src/etl/aggregation/customer_segments.py',
+    application='/src/aggregation/customer_segments.py',
     name='customer_segments',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -94,13 +96,14 @@ create_customer_segments = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Customer acquisition metrics
 create_acquisition_metrics = SparkSubmitOperator(
     task_id='create_acquisition_metrics',
-    application='/src/etl/aggregation/acquisition_metrics.py',
+    application='/src/aggregation/acquisition_metrics.py',
     name='acquisition_metrics',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -109,13 +112,14 @@ create_acquisition_metrics = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Campaign ROI analysis
 create_campaign_roi = SparkSubmitOperator(
     task_id='create_campaign_roi',
-    application='/src/etl/aggregation/campaign_roi.py',
+    application='/src/aggregation/campaign_roi.py',
     name='campaign_roi',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -124,13 +128,14 @@ create_campaign_roi = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Sales forecast and trends
 create_sales_forecast = SparkSubmitOperator(
     task_id='create_sales_forecast',
-    application='/src/etl/aggregation/sales_forecast.py',
+    application='/src/aggregation/sales_forecast.py',
     name='sales_forecast',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -139,13 +144,14 @@ create_sales_forecast = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 # Quality checks on Gold data
 run_gold_quality_checks = SparkSubmitOperator(
     task_id='run_gold_quality_checks',
-    application='/src/etl/quality/check_gold_data_quality.py',
+    application='/src/quality/check_gold_data_quality.py',
     name='gold_data_quality',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -154,6 +160,7 @@ run_gold_quality_checks = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 

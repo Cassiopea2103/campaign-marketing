@@ -379,15 +379,44 @@ def create_customer_journeys(web_sessions, customer_sessions, orders):
         # Add sequence number to orders
         sequenced_orders = valid_orders \
             .withColumn("order_seq", row_number().over(order_window))
+        
+        print(f"Sessions with marketing data: {sessions_with_attribution.count()}")
+        print(f"Valid orders: {valid_orders.count()}")
+
+        # Find any common user_ids between sessions and orders
+        session_user_ids = sessions_with_attribution.select("user_id").distinct()
+        order_customer_ids = valid_orders.select("customer_id").distinct()
+        common_ids = session_user_ids.intersect(order_customer_ids)
+        print(f"Common IDs between sessions and orders: {common_ids.count()}")
+
+        if common_ids.count() > 0:
+            # Get sessions and orders for the matching IDs
+            print("Sample matching IDs:")
+            matching_sessions = sessions_with_attribution.join(
+                common_ids, 
+                "user_id", 
+                "inner"
+            ).select("user_id", "session_start")
+        
+            matching_orders = valid_orders.join(
+                common_ids.withColumnRenamed("user_id", "customer_id"), 
+                "customer_id", 
+                "inner"
+            ).select("customer_id", "order_date")
+        
+            # Print some examples to see timing relationships
+            print("Sample matching sessions:")
+            matching_sessions.show(5)
+        
+            print("Sample matching orders:")
+            matching_orders.show(5)
             
         # Join sessions and orders for user journeys
         # Look for sessions that happened before orders (within 30 day window)
         journeys = sequenced_sessions \
             .join(
                 sequenced_orders,
-                (sequenced_sessions["user_id"] == sequenced_orders["customer_id"]) &
-                (sequenced_sessions["session_start"] <= sequenced_orders["order_date"]) &
-                (datediff(sequenced_orders["order_date"], sequenced_sessions["session_start"]) <= 30),
+                (sequenced_sessions["user_id"] == sequenced_orders["customer_id"]) ,
                 "inner"
             ) \
             .select(

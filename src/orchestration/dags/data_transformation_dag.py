@@ -115,7 +115,6 @@ join_web_customer_data = SparkSubmitOperator(
     application='/src/transformation/join_web_customer_data.py',
     name='join_web_customer_data',
     conn_id='spark_default',
-    application_args=["{{ ds }}"],
     conf={
         'spark.master': 'spark://spark-master:7077',
        
