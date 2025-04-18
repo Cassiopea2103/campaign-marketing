@@ -232,10 +232,12 @@ def create_acquisition_source_metrics(customers, orders, ad_data, date_ranges):
             ).withColumn(
                 "clv_cac_ratio",
                 when((col("cost_per_acquisition").isNotNull()) & 
-                     (col("cost_per_acquisition") > 0) & 
-                     (col("avg_customer_value").isNotNull())),
+                    (col("cost_per_acquisition") > 0) & 
+                    (col("avg_customer_value").isNotNull()),
                     col("avg_customer_value") / col("cost_per_acquisition")
-                ).otherwise(None)
+                ).otherwise(None)  # This closing parenthesis was missing
+            )
+            
             
         
         # Calculate dates for time series analysis
@@ -637,11 +639,11 @@ def create_acquisition_channel_effectiveness(attribution_data, web_sessions, ad_
             # This is just an example - real effectiveness would combine multiple metrics
             all_channels = all_channels.withColumn(
                 "effectiveness_score",
-                when(col("channel_type") == "Paid Media" & col("cost_per_conversion").isNotNull() & (col("cost_per_conversion") > 0),
+                when((col("channel_type") == "Paid Media") & (col("cost_per_conversion").isNotNull()) & (col("cost_per_conversion") > 0),
                     1000 / col("cost_per_conversion")  # Higher score for lower acquisition cost
-                ).when(col("channel_type") == "Web Traffic" & col("conversion_rate").isNotNull(),
+                ).when((col("channel_type") == "Web Traffic") & (col("conversion_rate").isNotNull()),
                     col("conversion_rate") / 10  # Scale conversion rate to comparable range
-                ).when(col("channel_type") == "Marketing Attribution" & col("attributed_revenue").isNotNull() & col("attributed_conversions").isNotNull() & (col("attributed_conversions") > 0),
+                ).when((col("channel_type") == "Marketing Attribution") & (col("attributed_revenue").isNotNull() )& (col("attributed_conversions").isNotNull()) & ((col("attributed_conversions") > 0)),
                     col("attributed_revenue") / col("attributed_conversions") / 1000  # Scale average revenue to comparable range
                 ).otherwise(0)
             )
