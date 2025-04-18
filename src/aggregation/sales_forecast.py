@@ -27,8 +27,7 @@ import sys
 import os
 from datetime import datetime, timedelta
 
-os.environ['PYSPARK_PYTHON'] = '/opt/bitnami/python/bin/python3.8'
-os.environ['PYSPARK_DRIVER_PYTHON'] = '/opt/bitnami/python/bin/python3.8'
+
 
 # Initialize Spark Session with S3/MinIO configuration
 spark = SparkSession.builder \
