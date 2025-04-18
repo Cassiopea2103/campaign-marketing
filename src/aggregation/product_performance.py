@@ -15,11 +15,12 @@ Usage:
 
 from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import (
-    col, when, lit, sum, count, avg, max, min, 
+    col, when, lit, sum, count, countDistinct, avg, max, min, 
     datediff, date_format, to_date, current_date, 
-    expr, round, dense_rank, lag, row_number,
+    expr, round, dense_rank, lag, row_number, regexp_extract,
     year, month, dayofmonth, quarter, dayofweek, 
-    weekofyear, from_unixtime, unix_timestamp
+    weekofyear, from_unixtime, unix_timestamp,
+    explode, collect_list, size, explode_outer
 )
 import sys
 import os
@@ -430,19 +431,33 @@ def create_trend_analysis(product_metrics, date_ranges):
 def analyze_product_seasonality(order_items, orders):
     """Analyze product seasonality patterns"""
     print("Analyzing product seasonality")
-    
+        
     if order_items is None or orders is None:
         print("Missing order data for seasonality analysis")
         return None
-    
+        
     try:
-        # Join order items with orders to get dates
-        order_data = order_items.join(
-            orders.select("order_id", "order_date", "season"),
-            "order_id",
+        # Join order items with orders to get dates with explicit column references
+        order_items_renamed = order_items.select(
+            col("order_id").alias("item_order_id"),
+            "product_name", 
+            "category", 
+            "quantity", 
+            "item_total"
+        )
+            
+        orders_renamed = orders.select(
+            col("order_id").alias("order_order_id"),
+            "order_date", 
+            "season"
+        )
+            
+        order_data = order_items_renamed.join(
+            orders_renamed,
+            col("item_order_id") == col("order_order_id"),
             "inner"
         )
-        
+            
         # Add date components for seasonality analysis
         order_data = order_data \
             .withColumn("order_date_dt", to_date(col("order_date"))) \
@@ -451,21 +466,21 @@ def analyze_product_seasonality(order_items, orders):
             .withColumn("quarter", quarter(col("order_date_dt"))) \
             .withColumn("day_of_week", dayofweek(col("order_date_dt"))) \
             .withColumn("week_of_year", weekofyear(col("order_date_dt")))
-        
-        # Analyze by season (using the season field from orders)
+            
+        # Analyze by season
         seasonal_analysis = order_data.groupBy("product_name", "category", "season").agg(
-            count("order_id").alias("order_count"),
+            count("item_order_id").alias("order_count"),
             sum("quantity").alias("total_quantity"),
             sum("item_total").alias("total_revenue")
         )
-        
+            
         # Get total metrics by product to calculate percentages
         product_totals = order_data.groupBy("product_name", "category").agg(
-            count("order_id").alias("product_total_orders"),
+            count("item_order_id").alias("product_total_orders"),
             sum("quantity").alias("product_total_quantity"),
             sum("item_total").alias("product_total_revenue")
         )
-        
+            
         # Join seasonal analysis with product totals
         seasonal_analysis = seasonal_analysis.join(
             product_totals,
@@ -487,10 +502,10 @@ def analyze_product_seasonality(order_items, orders):
                 (col("order_count") / col("product_total_orders")) * 100
             ).otherwise(0)
         )
-        
+            
         # Find the peak season for each product
         seasonal_window = Window.partitionBy("product_name").orderBy(col("total_revenue").desc())
-        
+            
         seasonal_analysis = seasonal_analysis.withColumn(
             "season_rank", 
             row_number().over(seasonal_window)
@@ -498,14 +513,14 @@ def analyze_product_seasonality(order_items, orders):
             "is_peak_season",
             col("season_rank") == 1
         )
-        
+            
         # Monthly analysis
         monthly_analysis = order_data.groupBy("product_name", "category", "month").agg(
-            count("order_id").alias("order_count"),
+            count("item_order_id").alias("order_count"),
             sum("quantity").alias("total_quantity"),
             sum("item_total").alias("total_revenue")
         )
-        
+            
         # Join with product totals
         monthly_analysis = monthly_analysis.join(
             product_totals,
@@ -517,10 +532,10 @@ def analyze_product_seasonality(order_items, orders):
                 (col("total_revenue") / col("product_total_revenue")) * 100
             ).otherwise(0)
         )
-        
+            
         # Find peak month
         month_window = Window.partitionBy("product_name").orderBy(col("total_revenue").desc())
-        
+            
         monthly_analysis = monthly_analysis.withColumn(
             "month_rank", 
             row_number().over(month_window)
@@ -528,23 +543,23 @@ def analyze_product_seasonality(order_items, orders):
             "is_peak_month",
             col("month_rank") == 1
         )
-        
+            
         # Create month name column for readability
         month_names = {
             1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
             7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
         }
-        
+            
         mapping_expr = expr("CASE " + " ".join([f"WHEN month = {k} THEN '{v}'" for k, v in month_names.items()]) + " END")
         monthly_analysis = monthly_analysis.withColumn("month_name", mapping_expr)
-        
+            
         # Create day of week analysis
         dow_analysis = order_data.groupBy("product_name", "category", "day_of_week").agg(
-            count("order_id").alias("order_count"),
+            count("item_order_id").alias("order_count"),
             sum("quantity").alias("total_quantity"),
             sum("item_total").alias("total_revenue")
         )
-        
+            
         # Join with product totals
         dow_analysis = dow_analysis.join(
             product_totals,
@@ -556,26 +571,26 @@ def analyze_product_seasonality(order_items, orders):
                 (col("total_revenue") / col("product_total_revenue")) * 100
             ).otherwise(0)
         )
-        
+            
         # Create day name column for readability
         day_names = {
             1: "Sunday", 2: "Monday", 3: "Tuesday", 4: "Wednesday", 
             5: "Thursday", 6: "Friday", 7: "Saturday"
         }
-        
+            
         mapping_expr = expr("CASE " + " ".join([f"WHEN day_of_week = {k} THEN '{v}'" for k, v in day_names.items()]) + " END")
         dow_analysis = dow_analysis.withColumn("day_name", mapping_expr)
-        
+            
         print(f"Created seasonal analysis for {seasonal_analysis.count()} product-season combinations")
         print(f"Created monthly analysis for {monthly_analysis.count()} product-month combinations")
         print(f"Created day of week analysis for {dow_analysis.count()} product-day combinations")
-        
+            
         return {
             "seasonal": seasonal_analysis,
             "monthly": monthly_analysis,
             "dow": dow_analysis
         }
-    
+        
     except Exception as e:
         print(f"Error analyzing product seasonality: {e}")
         return None
@@ -583,68 +598,88 @@ def analyze_product_seasonality(order_items, orders):
 def calculate_product_combinations(order_items):
     """Calculate frequently purchased product combinations"""
     print("Calculating product combination analysis")
-    
+        
     if order_items is None:
         print("Missing order items data for combination analysis")
         return None
-    
+        
     try:
         # Import needed functions
-        from pyspark.sql.functions import collect_list, arrays_zip, explode, size, array, array_repeat
-        
+        from pyspark.sql.functions import collect_list, explode, size, countDistinct
+            
         # Group items by order to get combinations
         order_products = order_items.groupBy("order_id").agg(
             collect_list("product_name").alias("products")
         )
-        
-        # Explode the products array to get product pairs
-        from pyspark.sql.functions import arrays_zip, explode, size, array, array_repeat
-        
-        # For pairs, we need to create combinations of products within the same order
-        # This approach creates a cartesian product of products within each order
-        order_products_pairs = order_products.filter(size("products") > 1) \
-            .select(
-                "order_id",
-                explode(
-                    arrays_zip(
-                        "products",
-                        array_repeat(col("products"), size("products"))
-                    )
-                ).alias("product_pair")
-            )
-        
-        # Filter out pairs where both products are the same
-        order_products_pairs = order_products_pairs.filter(
-            col("product_pair.products") != col("product_pair.products_1")
+            
+        # Skip SQL approach and use DataFrame API instead
+        # Filter to orders with at least 2 products
+        orders_with_multiple_products = order_products.filter(size(col("products")) > 1)
+            
+        # Create pairs directly
+        product_pairs_df = orders_with_multiple_products.select(
+            "order_id", 
+            explode("products").alias("product1")
         )
-        
+            
+        pairs_with_remaining = product_pairs_df.join(
+            orders_with_multiple_products,
+            "order_id"
+        )
+            
+        # Create arrays with products after the current one
+        from pyspark.sql.functions import array, array_position, slice
+            
+        # Create a custom UDF to get remaining products after index
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import ArrayType, StringType
+            
+        @udf(returnType=ArrayType(StringType()))
+        def get_remaining_products(all_products, current_product):
+            if current_product in all_products:
+                index = all_products.index(current_product)
+                return all_products[index+1:]
+            return []
+            
+        # Apply UDF to get remaining products
+        pairs_with_remaining = pairs_with_remaining.withColumn(
+            "remaining_products", 
+            get_remaining_products("products", "product1")
+        )
+            
+        # Now explode the remaining products
+        product_pairs = pairs_with_remaining.select(
+            "order_id",
+            "product1",
+            explode_outer("remaining_products").alias("product2")
+        ).filter(col("product2").isNotNull())
+            
         # Count frequency of each product pair
-        product_pairs = order_products_pairs.select(
-            col("product_pair.products").alias("product1"),
-            col("product_pair.products_1").alias("product2")
-        ).groupBy("product1", "product2").agg(
+        product_pairs = product_pairs.groupBy("product1", "product2").agg(
             count("*").alias("pair_frequency")
         )
-        
+            
         # Calculate total orders for each product
         product_order_counts = order_items.groupBy("product_name").agg(
-            count("distinct order_id").alias("order_count")
+            countDistinct("order_id").alias("order_count")
         )
-        
+            
         # Join to get order counts for each product in the pair
         product_pairs = product_pairs.join(
             product_order_counts.withColumnRenamed("product_name", "product1")
-                              .withColumnRenamed("order_count", "product1_orders"),
+                            .withColumnRenamed("order_count", "product1_orders"),
             "product1",
             "left"
         ).join(
             product_order_counts.withColumnRenamed("product_name", "product2")
-                              .withColumnRenamed("order_count", "product2_orders"),
+                            .withColumnRenamed("order_count", "product2_orders"),
             "product2",
             "left"
         )
-        
+            
         # Calculate conditional probability and lift
+        total_orders = order_items.select("order_id").distinct().count()
+            
         product_pairs = product_pairs \
             .withColumn(
                 "conditional_probability", 
@@ -653,79 +688,94 @@ def calculate_product_combinations(order_items):
             .withColumn(
                 "lift", 
                 when((col("product1_orders") > 0) & (col("product2_orders") > 0),
-                    (col("pair_frequency") * order_items.select("order_id").distinct().count()) / 
+                    (col("pair_frequency") * total_orders) / 
                     (col("product1_orders") * col("product2_orders"))
                 ).otherwise(0)
             )
-        
-        # Add inverse pair (product2, product1) to ensure we capture all relationships
-        inverse_pairs = product_pairs.select(
-            col("product2").alias("product1"),
-            col("product1").alias("product2"),
-            col("pair_frequency"),
-            col("product2_orders").alias("product1_orders"),
-            col("product1_orders").alias("product2_orders"),
-            col("conditional_probability"),
-            col("lift")
-        )
-        
-        # Combine with original pairs
-        all_pairs = product_pairs.union(inverse_pairs)
-        
+            
         # Rank by lift
         lift_window = Window.partitionBy("product1").orderBy(col("lift").desc())
-        
-        product_combinations = all_pairs \
+            
+        product_combinations = product_pairs \
             .withColumn("combination_rank", row_number().over(lift_window)) \
             .withColumn("is_strong_combination", col("lift") > 2.0) \
             .withColumn("is_top_combination", col("combination_rank") <= 3)
-        
+            
         print(f"Created {product_combinations.count()} product combination records")
         return product_combinations
-    
+        
     except Exception as e:
         print(f"Error calculating product combinations: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def analyze_product_conversion(order_items, orders, web_logs):
     """Analyze product view-to-purchase conversion rates"""
     print("Analyzing product conversion rates")
-    
+        
     if order_items is None or web_logs is None:
         print("Missing data for product conversion analysis")
         return None
-    
+        
     try:
         # Count product views from web logs
-        product_views = web_logs.filter(col("event_type") == "product_view") \
-            .groupBy("page_url") \
-            .agg(count("*").alias("view_count"))
-        
-        # Extract product name from URL
-        from pyspark.sql.functions import regexp_extract
-        
-        product_views = product_views \
-            .withColumn(
-                "product_name", 
-                regexp_extract(col("page_url"), "/products/([^/]+)", 1)
-            ) \
-            .filter(col("product_name").isNotNull()) \
-            .groupBy("product_name") \
-            .agg(sum("view_count").alias("total_views"))
-        
-        # Count product purchases - using proper syntax for count distinct
+        from pyspark.sql.functions import countDistinct, regexp_extract
+            
+        # First check what we're working with
+        if "event_type" in web_logs.columns:
+            product_views = web_logs.filter(col("event_type") == "product_view")
+                
+            # Show sample data for debugging - use built-in min function correctly
+            view_count = web_logs.filter(col("event_type") == "product_view").count()
+            sample_size = 5 if view_count > 5 else view_count
+                
+            if sample_size > 0:
+                print("Sample product view URLs:")
+                web_logs.filter(col("event_type") == "product_view").select("page_url").limit(sample_size).show(truncate=False)
+                
+            product_views = product_views \
+                .withColumn(
+                    "product_name", 
+                    regexp_extract(col("page_url"), "/products/([^/]+)", 1)
+                ) \
+                .filter(col("product_name").isNotNull()) \
+                .groupBy("product_name") \
+                .agg(count("*").alias("total_views"))
+        else:
+            # Create empty dataframe with correct schema if no product views available
+            from pyspark.sql.types import StructType, StructField, StringType, LongType
+            schema = StructType([
+                StructField("product_name", StringType(), True),
+                StructField("total_views", LongType(), True)
+            ])
+            product_views = spark.createDataFrame([], schema)
+            print("No event_type column found in web_logs or no product views found")
+            
+        # Count product purchases
         product_purchases = order_items.groupBy("product_name").agg(
             sum("quantity").alias("total_purchases"),
-            count(expr("distinct order_id")).alias("order_count")
+            countDistinct("order_id").alias("order_count")
         )
-        
+            
+        # Print sample counts
+        print(f"Found {product_views.count()} products with views")
+        print(f"Found {product_purchases.count()} products with purchases")
+            
         # Join views with purchases
         conversion_analysis = product_views.join(
             product_purchases,
             "product_name",
-            "left"
-        ).na.fill(0, ["total_purchases", "order_count"])
-        
+            "full_outer"  # Include products with only views or only purchases
+        )
+            
+        # Fill null values with 0
+        conversion_analysis = conversion_analysis.na.fill({
+            "total_views": 0,
+            "total_purchases": 0,
+            "order_count": 0
+        })
+            
         # Calculate conversion rates
         conversion_analysis = conversion_analysis \
             .withColumn(
@@ -740,29 +790,29 @@ def analyze_product_conversion(order_items, orders, web_logs):
                     col("order_count") / col("total_views")
                 ).otherwise(0)
             )
-        
+            
         # Add category information
         category_info = order_items.select("product_name", "category").distinct()
-        
+            
         conversion_analysis = conversion_analysis.join(
             category_info,
             "product_name",
             "left"
         )
-        
+            
         # Calculate category averages
-        category_averages = conversion_analysis.groupBy("category").agg(
+        category_averages = conversion_analysis.filter(col("category").isNotNull()).groupBy("category").agg(
             avg("view_to_purchase_rate").alias("category_avg_purchase_rate"),
             avg("view_to_order_rate").alias("category_avg_order_rate")
         )
-        
+            
         # Join with category averages
         conversion_analysis = conversion_analysis.join(
             category_averages,
             "category",
             "left"
         )
-        
+            
         # Compare product to category average
         conversion_analysis = conversion_analysis \
             .withColumn(
@@ -777,12 +827,14 @@ def analyze_product_conversion(order_items, orders, web_logs):
                 .when(col("purchase_rate_vs_category") >= -0.2, "Average")
                 .otherwise("Below Average")
             )
-        
+            
         print(f"Created conversion analysis for {conversion_analysis.count()} products")
         return conversion_analysis
-    
+        
     except Exception as e:
         print(f"Error analyzing product conversion: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def save_to_gold(dataframe, path, partition_cols):
@@ -915,34 +967,33 @@ def create_product_performance_gold(process_date):
     # Save seasonality analysis to Gold
     if seasonality_analysis is not None:
         # Save seasonal analysis
-        seasonal = seasonality_analysis.get("seasonal")
-        if seasonal is not None:
-            seasonal = seasonal \
-                .withColumn("processing_date", lit(processing_date_str)) \
-                .withColumn("year", lit(processing_year)) \
-                .withColumn("month", lit(processing_month)) \
-                .withColumn("day", lit(processing_day))
-            
-            success = success and save_to_gold(
-                seasonal,
-                f"{MINIO_GOLD_PRODUCT_PERFORMANCE}/seasonal_analysis",
-                ["season", "year", "month"]
-            )
+        seasonal = seasonal \
+            .withColumn("processing_date", lit(processing_date_str)) \
+            .withColumn("processing_year", lit(processing_year)) \
+            .withColumn("processing_month", lit(processing_month)) \
+            .withColumn("processing_day", lit(processing_day))
         
-        # Save monthly analysis
-        monthly = seasonality_analysis.get("monthly")
-        if monthly is not None:
-            monthly = monthly \
-                .withColumn("processing_date", lit(processing_date_str)) \
-                .withColumn("year", lit(processing_year)) \
-                .withColumn("month", lit(processing_month)) \
-                .withColumn("day", lit(processing_day))
-            
-            success = success and save_to_gold(
-                monthly,
-                f"{MINIO_GOLD_PRODUCT_PERFORMANCE}/monthly_analysis",
-                ["month", "year", "month"]
-            )
+        success = success and save_to_gold(
+            seasonal,
+            f"{MINIO_GOLD_PRODUCT_PERFORMANCE}/seasonal_analysis",
+            ["season", "processing_year", "processing_month"]
+        )
+    
+    # Save monthly analysis - avoid duplicate column names
+    monthly = seasonality_analysis.get("monthly")
+    if monthly is not None:
+        monthly = monthly \
+            .withColumnRenamed("month", "month_number") \
+            .withColumn("processing_date", lit(processing_date_str)) \
+            .withColumn("processing_year", lit(processing_year)) \
+            .withColumn("processing_month", lit(processing_month)) \
+            .withColumn("processing_day", lit(processing_day))
+        
+        success = success and save_to_gold(
+            monthly,
+            f"{MINIO_GOLD_PRODUCT_PERFORMANCE}/monthly_analysis",
+            ["month_number", "processing_year", "processing_month"]
+        )
     
     # Save product combinations to Gold
     if product_combinations is not None:
