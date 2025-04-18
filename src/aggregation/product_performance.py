@@ -701,13 +701,7 @@ def calculate_product_combinations(order_items):
             .withColumn("is_strong_combination", col("lift") > 2.0) \
             .withColumn("is_top_combination", col("combination_rank") <= 3)
             
-        try:
-            # Take one row just to check if the DataFrame is empty
-            product_combinations.limit(1).collect()
-            print("Created product combination records successfully")
-        except:
-            print("No product combination records created or error during processing")
-            
+        print(f"Created {product_combinations.count()} product combination records")
         return product_combinations
         
     except Exception as e:
