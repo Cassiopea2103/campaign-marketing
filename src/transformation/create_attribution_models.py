@@ -14,7 +14,7 @@ Usage:
 from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import (
     col, when, lit, row_number, lag, lead, sum, count, avg, max, min, explode,
-    datediff, date_add, to_date, current_date, expr, round, concat, array
+    datediff, date_add, to_date, current_date, expr, round, concat, array, collect_list, collect_set, struct, year, month, dayofmonth
 )
 import sys
 import os
@@ -310,17 +310,48 @@ def load_ad_data(start_date, end_date):
 def create_customer_journeys(web_sessions, customer_sessions, orders):
     """Create customer journeys by joining web sessions with orders"""
     print("Creating customer journeys")
-    
+        
     if web_sessions is None or orders is None:
         print("Missing required data for customer journeys")
         return None
-    
-    try:
-        # Combine web sessions and customer sessions
-        all_sessions = web_sessions
-        if customer_sessions is not None:
-            all_sessions = web_sessions.union(customer_sessions)
         
+    try:
+        # Instead of directly unioning the DataFrames, we need to ensure they have the same schema
+        # Select only the common columns from both DataFrames
+        common_columns = [
+            "session_id", "session_start", "session_end", "date", "user_id", 
+            "is_authenticated", "user_email", "user_segment", "device_type", 
+            "browser", "is_mobile", "country", "city", "region", 
+            "utm_source", "utm_medium", "utm_campaign", "campaign_id", 
+            "event_count", "conversion_session"
+        ]
+            
+        # Filter and select columns for both datasets
+        all_sessions = None
+            
+        if customer_sessions is not None:
+            # Check what columns actually exist in both DataFrames
+            web_columns = web_sessions.columns
+            customer_columns = customer_sessions.columns
+                
+            # Find intersection of columns that exist in both DataFrames
+            valid_columns = [col for col in common_columns if col in web_columns and col in customer_columns]
+                
+            # If there are valid common columns, proceed with union
+            if valid_columns:
+                print(f"Using common columns for union: {valid_columns}")
+                    
+                web_selected = web_sessions.select(valid_columns)
+                customer_selected = customer_sessions.select(valid_columns)
+                    
+                all_sessions = web_selected.union(customer_selected)
+            else:
+                print("No common columns found between web_sessions and customer_sessions")
+                all_sessions = web_sessions
+        else:
+            # If no customer sessions, just use web sessions
+            all_sessions = web_sessions
+            
         # Filter for sessions with marketing attribution data
         sessions_with_attribution = all_sessions.filter(
             col("utm_source").isNotNull() | 
@@ -328,27 +359,27 @@ def create_customer_journeys(web_sessions, customer_sessions, orders):
             col("utm_campaign").isNotNull() |
             col("campaign_id").isNotNull()
         )
-        
+            
         attr_session_count = sessions_with_attribution.count()
         print(f"Found {attr_session_count} sessions with marketing attribution data")
-        
+            
         # Window for ordering sessions by user and timestamp
         user_window = Window.partitionBy("user_id").orderBy("session_start")
-        
+            
         # Add sequence number to sessions
         sequenced_sessions = sessions_with_attribution \
             .withColumn("session_seq", row_number().over(user_window))
-        
+            
         # Get orders
         valid_orders = orders.filter(col("customer_id").isNotNull())
-        
+            
         # Window for ordering orders by user and date
         order_window = Window.partitionBy("customer_id").orderBy("order_date")
-        
+            
         # Add sequence number to orders
         sequenced_orders = valid_orders \
             .withColumn("order_seq", row_number().over(order_window))
-        
+            
         # Join sessions and orders for user journeys
         # Look for sessions that happened before orders (within 30 day window)
         journeys = sequenced_sessions \
@@ -377,7 +408,7 @@ def create_customer_journeys(web_sessions, customer_sessions, orders):
                     sequenced_sessions["session_start"]
                 ).alias("days_before_purchase")
             )
-        
+            
         # Calculate journey metrics
         journey_metrics = journeys \
             .groupBy("order_id", "user_id", "order_date", "order_value") \
@@ -395,13 +426,15 @@ def create_customer_journeys(web_sessions, customer_sessions, orders):
                     )
                 ).alias("touchpoints")
             )
-        
+            
         journey_count = journey_metrics.count()
         print(f"Created {journey_count} customer journeys")
-        
+            
         return journey_metrics
     except Exception as e:
         print(f"Error creating customer journeys: {e}")
+        import traceback
+        traceback.print_exc()  # Print full traceback for debugging
         return None
 
 def create_attribution_models(journey_metrics):
@@ -596,11 +629,11 @@ def create_attribution_models(journey_metrics):
 def calculate_channel_performance(attribution_data, ad_data):
     """Calculate performance metrics for each channel based on attribution"""
     print("Calculating channel performance metrics")
-    
+        
     if attribution_data is None:
         print("Missing attribution data for channel performance")
         return None
-    
+        
     try:
         # Aggregate attribution by channel (source, medium, campaign) and model
         channel_performance = attribution_data \
@@ -610,14 +643,15 @@ def calculate_channel_performance(attribution_data, ad_data):
                 count("order_id").alias("conversions"),
                 sum("attributed_revenue").alias("attributed_revenue"),
                 avg("touchpoint_weight").alias("avg_touchpoint_weight"),
-                count(distinct("order_id")).alias("unique_orders"),
-                count(distinct("user_id")).alias("unique_users")
+                expr("COUNT(DISTINCT order_id)").alias("unique_orders"),
+                expr("COUNT(DISTINCT user_id)").alias("unique_users")
             ) \
             .withColumn("attribution_date", current_date())
-        
+            
         # Join with ad spend data if available to calculate ROI
         # First combine all ad data sources and create a standard schema
         if ad_data and ("all_platforms" in ad_data) and (ad_data["all_platforms"] is not None):
+            # Rename the campaign_id column in ad_spend to avoid duplicate columns
             ad_spend = ad_data["all_platforms"] \
                 .groupBy("campaign_id", "platform", "campaign_name") \
                 .agg(
@@ -625,17 +659,17 @@ def calculate_channel_performance(attribution_data, ad_data):
                     sum("impressions").alias("total_impressions"),
                     sum("clicks").alias("total_clicks"),
                     sum("conversions").alias("tracked_conversions")
-                )
-            
-            # Join attribution data with ad spend
+                ) \
+                .withColumnRenamed("campaign_id", "ad_campaign_id")
+                
+            # Join attribution data with ad spend using the renamed column
             channel_performance_with_spend = channel_performance \
                 .join(
                     ad_spend,
-                    channel_performance["campaign_id"] == ad_spend["campaign_id"],
+                    channel_performance["campaign_id"] == ad_spend["ad_campaign_id"],
                     "left"
                 ) \
-                .withColumn("roi", 
-                    when(col("total_cost").isNotNull() & (col("total_cost") > 0),
+                .drop("ad_campaign_id") .withColumn("roi", when(col("total_cost").isNotNull() & (col("total_cost") > 0), 
                         (col("attributed_revenue") - col("total_cost")) / col("total_cost")
                     ).otherwise(None)
                 ) \
@@ -654,7 +688,7 @@ def calculate_channel_performance(attribution_data, ad_data):
                         col("conversions") / col("total_clicks")
                     ).otherwise(None)
                 )
-            
+                
             print(f"Calculated performance metrics with spend data for {channel_performance_with_spend.count()} channel combinations")
             return channel_performance_with_spend
         else:
@@ -662,6 +696,8 @@ def calculate_channel_performance(attribution_data, ad_data):
             return channel_performance
     except Exception as e:
         print(f"Error calculating channel performance: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def create_marketing_attribution(process_date, days_back=30):
@@ -698,4 +734,75 @@ def create_marketing_attribution(process_date, days_back=30):
                 .write \
                 .format("parquet") \
                 .mode("overwrite") \
-                .partitionBy("attribution_model", "year", "month")
+                .partitionBy("attribution_model", "year", "month") \
+                .save(MINIO_SILVER_ATTRIBUTION)
+                            
+            print(f"Successfully wrote attribution data to Silver at {MINIO_SILVER_ATTRIBUTION}")
+        except Exception as e:
+            print(f"Error writing attribution data to MinIO Silver: {e}")
+            # Try local filesystem as fallback
+            try:
+                local_silver_path = "/data/silver/marketing_attribution"
+                print(f"Attempting to write to local path: {local_silver_path}")
+                attribution_data \
+                    .withColumn("year", year(col("order_date"))) \
+                    .withColumn("month", month(col("order_date"))) \
+                    .withColumn("day", dayofmonth(col("order_date"))) \
+                    .write \
+                    .format("parquet") \
+                    .mode("overwrite") \
+                    .partitionBy("attribution_model", "year", "month") \
+                    .save(local_silver_path)
+                
+                print(f"Successfully wrote attribution data to local Silver at {local_silver_path}")
+            except Exception as e2:
+                print(f"Error writing attribution data to local Silver: {e2}")
+                return False
+    
+    # Save channel performance to Silver
+    if channel_performance is not None:
+        try:
+            # Add processing date
+            channel_performance_with_date = channel_performance \
+                .withColumn("processing_date", lit(date_str)) \
+                .withColumn("year", year(lit(date_str))) \
+                .withColumn("month", month(lit(date_str))) \
+                .withColumn("day", dayofmonth(lit(date_str)))
+            
+            # Write to Silver
+            channel_performance_with_date.write \
+                .format("parquet") \
+                .mode("overwrite") \
+                .partitionBy("attribution_model", "year", "month") \
+                .save(MINIO_SILVER_CHANNEL_PERFORMANCE)
+            
+            print(f"Successfully wrote channel performance data to Silver at {MINIO_SILVER_CHANNEL_PERFORMANCE}")
+        except Exception as e:
+            print(f"Error writing channel performance data to MinIO Silver: {e}")
+            # Try local filesystem as fallback
+            try:
+                local_silver_path = "/data/silver/channel_performance"
+                print(f"Attempting to write to local path: {local_silver_path}")
+                channel_performance_with_date.write \
+                    .format("parquet") \
+                    .mode("overwrite") \
+                    .partitionBy("attribution_model", "year", "month") \
+                    .save(local_silver_path)
+                
+                print(f"Successfully wrote channel performance data to local Silver at {local_silver_path}")
+            except Exception as e2:
+                print(f"Error writing channel performance data to local Silver: {e2}")
+                return False
+    
+    return True
+
+if __name__ == "__main__":
+    # Get date from command line arguments or use default
+    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    process_date = get_date_to_process(date_arg)
+    
+    # Process attribution data
+    success = create_marketing_attribution(process_date)
+    
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)
