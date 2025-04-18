@@ -27,6 +27,9 @@ import sys
 import os
 from datetime import datetime, timedelta
 
+os.environ['PYSPARK_PYTHON'] = '/opt/bitnami/python/bin/python3.8'
+os.environ['PYSPARK_DRIVER_PYTHON'] = '/opt/bitnami/python/bin/python3.8'
+
 # Initialize Spark Session with S3/MinIO configuration
 spark = SparkSession.builder \
     .appName("Sales Forecast Analytics") \
@@ -129,9 +132,23 @@ def create_time_series_data(orders, order_items, date_ranges):
             "order_id",
             "inner"
         )
+
+        # Check join results
+        join_count = sales_data.count()
+        print(f"After joining orders and order items, {join_count} records remain")
+        if join_count == 0:
+            print("No data after joining orders and order items")
+            return None
         
         # Filter for completed orders only
-        sales_data = sales_data.filter(col("order_status_from_orders").isin("completed", "shipped", "delivered"))
+        sales_data = sales_data.filter(col("order_status_from_orders").isin("Livré") )
+
+        # Check filter results
+        status_filtered_count = sales_data.count()
+        print(f"After filtering for completed orders, {status_filtered_count} records remain")
+        if status_filtered_count == 0:
+            print("No completed orders found")
+            return None
         
         # Filter for date range
         historical_start, historical_end = date_ranges["historical"]
@@ -142,6 +159,13 @@ def create_time_series_data(orders, order_items, date_ranges):
             (to_date(col("order_date_from_orders")) >= start_date_str) &
             (to_date(col("order_date_from_orders")) <= end_date_str)
         )
+
+        # Check date filter results
+        date_filtered_count = sales_data.count()
+        print(f"After filtering for date range {start_date_str} to {end_date_str}, {date_filtered_count} records remain")
+        if date_filtered_count == 0:
+            print("No orders found in the specified date range")
+            return None
         
         # Add date components
         time_series = sales_data \
@@ -288,24 +312,37 @@ def create_growth_trends(time_series_data):
     
     try:
         monthly_sales = time_series_data["monthly_sales"]
+
+        # Check if data exists
+        if monthly_sales.count() == 0:
+            print("No monthly sales data available for analysis")
+            return None
         
         # Calculate overall growth trends
         recent_months = monthly_sales.orderBy(col("month_idx").desc()).limit(6)
+
+        # Verify we have data after filtering
+        recent_month_count = recent_months.count()
+        print(f"Found {recent_month_count} recent months for growth trend analysis")
+        if recent_month_count == 0:
+            print("No recent months data available for growth trends")
+            return None
         
         # Calculate average growth rates
         avg_mom_growth = recent_months.select(avg("mom_growth")).collect()[0][0]
         avg_yoy_growth = recent_months.filter(col("yoy_growth").isNotNull()).select(avg("yoy_growth")).collect()[0][0]
         
         # Create growth trend summary
+        # Handle null values and use explicit typing
         growth_summary = spark.createDataFrame([
             (
                 "Overall", 
-                avg_mom_growth, 
-                avg_yoy_growth,
-                recent_months.select(min("mom_growth")).collect()[0][0],
-                recent_months.select(max("mom_growth")).collect()[0][0],
-                recent_months.select(min("yoy_growth")).collect()[0][0],
-                recent_months.select(max("yoy_growth")).collect()[0][0]
+                float(avg_mom_growth) if avg_mom_growth is not None else 0.0, 
+                float(avg_yoy_growth) if avg_yoy_growth is not None else 0.0,
+                float(recent_months.select(min("mom_growth")).collect()[0][0]) if recent_months.select(min("mom_growth")).collect()[0][0] is not None else 0.0,
+                float(recent_months.select(max("mom_growth")).collect()[0][0]) if recent_months.select(max("mom_growth")).collect()[0][0] is not None else 0.0,
+                float(recent_months.select(min("yoy_growth")).collect()[0][0]) if recent_months.select(min("yoy_growth")).collect()[0][0] is not None else 0.0,
+                float(recent_months.select(max("yoy_growth")).collect()[0][0]) if recent_months.select(max("yoy_growth")).collect()[0][0] is not None else 0.0
             )
         ], ["segment", "avg_mom_growth", "avg_yoy_growth", "min_mom_growth", "max_mom_growth", "min_yoy_growth", "max_yoy_growth"])
         
@@ -352,7 +389,7 @@ def create_growth_trends(time_series_data):
                 "momentum",
                 when(col("avg_mom_growth") > col("avg_yoy_growth"), "Accelerating")
                 .when(col("avg_mom_growth") > 0, "Continuing")
-                .when(col("avg_mom_growth") < 0 & col("avg_yoy_growth") > 0, "Slowing")
+                .when((col("avg_mom_growth") < 0 ) & (col("avg_yoy_growth") > 0), "Slowing")
                 .otherwise("Declining")
             )
         
@@ -384,17 +421,27 @@ def create_seasonality_analysis(time_series_data):
                 avg("monthly_quantity").alias("avg_monthly_quantity")
             )
         
+        # Verify month seasonality data
+        month_count = month_seasonality.count()
+        print(f"Found {month_count} months for seasonality analysis")
+        if month_count == 0:
+            print("No month data available for seasonality analysis")
+            return None
+        
         # Get overall monthly average
         overall_avg = monthly_sales \
             .select(avg("monthly_revenue").alias("overall_avg_revenue")) \
             .collect()[0][0]
         
+        print(f"Overall average revenue: {overall_avg}")
+        
         # Calculate seasonal index (ratio of month avg to overall avg)
         seasonality_index = month_seasonality \
             .withColumn(
                 "seasonal_index",
-                when(overall_avg > 0, col("avg_monthly_revenue") / lit(overall_avg))
-                .otherwise(1.0)
+                when(col("avg_monthly_revenue").isNotNull() & lit(overall_avg).isNotNull() & (lit(overall_avg) > 0),
+                    col("avg_monthly_revenue") / lit(overall_avg)
+                ).otherwise(lit(1.0))
             ) \
             .orderBy("month")
         
@@ -656,7 +703,22 @@ def create_sales_forecast_gold(process_date):
     # Load data from Silver
     orders = load_orders_data()
     order_items = load_order_items_data()
-    
+
+    # Add these verification statements
+    if orders is not None:
+        print(f"Loaded orders data with {orders.count()} records")
+        # Check what order statuses actually exist
+        distinct_statuses = orders.select("order_status").distinct().collect()
+        print(f"Distinct order statuses: {[row.order_status for row in distinct_statuses]}")
+
+    else:
+        print("Failed to load orders data")
+        
+    if order_items is not None:
+        print(f"Loaded order items data with {order_items.count()} records")
+    else:
+        print("Failed to load order items data")
+
     # Process data and create gold tables
     
     # 1. Create time series data
