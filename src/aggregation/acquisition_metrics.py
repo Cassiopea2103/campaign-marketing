@@ -17,7 +17,8 @@ from pyspark.sql.functions import (
     col, when, lit, sum, count, avg, max, min, concat, 
     datediff, date_format, to_date, current_date, 
     expr, round, dense_rank, lag, lead, first, row_number,
-    year, month, dayofmonth, quarter, explode, array, collect_list
+    year, month, dayofmonth, quarter, explode, array, collect_list,
+    countDistinct, lower  # Added missing functions
 )
 import sys
 import os
@@ -168,16 +169,16 @@ def create_acquisition_source_metrics(customers, orders, ad_data, date_ranges):
         # Calculate value metrics if orders data is available
         if orders is not None:
             # Get first order date for each customer
-            first_orders = orders.groupBy("customer_id").agg(
+            first_orders = orders.groupBy(col("customer_id").alias("order_customer_id")).agg(
                 min("order_date").alias("first_order_date"),
                 count("order_id").alias("order_count"),
                 sum("final_total").alias("total_spend")
             )
             
-            # Join with customers
+            # Join with customers - use explicit column names to avoid ambiguity
             customer_value = acquisition_data.join(
                 first_orders,
-                acquisition_data["customer_id"] == first_orders["customer_id"],
+                acquisition_data["customer_id"] == first_orders["order_customer_id"],
                 "left"
             )
             
@@ -235,7 +236,7 @@ def create_acquisition_source_metrics(customers, orders, ad_data, date_ranges):
                      (col("avg_customer_value").isNotNull())),
                     col("avg_customer_value") / col("cost_per_acquisition")
                 ).otherwise(None)
-            )
+            
         
         # Calculate dates for time series analysis
         time_period_metrics = []
@@ -307,7 +308,7 @@ def create_acquisition_source_metrics(customers, orders, ad_data, date_ranges):
 
 def create_cohort_analysis(customers, orders, date_ranges):
     """Create cohort analysis for customer acquisition"""
-    print("Creating acquisition cohort analysis")
+    print("Creating cohort analysis")
     
     if customers is None or orders is None:
         print("Missing required data for cohort analysis")
@@ -748,4 +749,81 @@ def create_acquisition_metrics_gold(process_date):
             .withColumn("processing_date", lit(processing_date_str)) \
             .withColumn("year", lit(processing_year)) \
             .withColumn("month", lit(processing_month)) \
-            .
+            .withColumn("day", lit(processing_day))
+        
+        success = success and save_to_gold(
+            source_metrics,
+            f"{MINIO_GOLD_ACQUISITION_METRICS}/acquisition_source",
+            ["time_period", "year", "month"]
+        )
+    
+    # Save cohort analysis to Gold
+    if cohort_analysis is not None:
+        cohort_retention = cohort_analysis.get("retention")
+        if cohort_retention is not None:
+            cohort_retention = cohort_retention \
+                .withColumn("processing_date", lit(processing_date_str)) \
+                .withColumn("year", lit(processing_year)) \
+                .withColumn("month", lit(processing_month)) \
+                .withColumn("day", lit(processing_day))
+            
+            success = success and save_to_gold(
+                cohort_retention,
+                f"{MINIO_GOLD_ACQUISITION_METRICS}/cohort_retention",
+                ["cohort_id", "year", "month"]
+            )
+        
+        first_purchase = cohort_analysis.get("first_purchase")
+        if first_purchase is not None:
+            first_purchase = first_purchase \
+                .withColumn("processing_date", lit(processing_date_str)) \
+                .withColumn("year", lit(processing_year)) \
+                .withColumn("month", lit(processing_month)) \
+                .withColumn("day", lit(processing_day))
+            
+            success = success and save_to_gold(
+                first_purchase,
+                f"{MINIO_GOLD_ACQUISITION_METRICS}/first_purchase",
+                ["cohort_id", "year", "month"]
+            )
+    
+    # Save LTV projections to Gold
+    if ltv_projections is not None:
+        ltv_projections = ltv_projections \
+            .withColumn("processing_date", lit(processing_date_str)) \
+            .withColumn("year", lit(processing_year)) \
+            .withColumn("month", lit(processing_month)) \
+            .withColumn("day", lit(processing_day))
+        
+        success = success and save_to_gold(
+            ltv_projections,
+            f"{MINIO_GOLD_ACQUISITION_METRICS}/ltv_projections",
+            ["acquisition_source", "tenure_bucket", "year", "month"]
+        )
+    
+    # Save channel effectiveness to Gold
+    if channel_effectiveness is not None:
+        channel_effectiveness = channel_effectiveness \
+            .withColumn("processing_date", lit(processing_date_str)) \
+            .withColumn("year", lit(processing_year)) \
+            .withColumn("month", lit(processing_month)) \
+            .withColumn("day", lit(processing_day))
+        
+        success = success and save_to_gold(
+            channel_effectiveness,
+            f"{MINIO_GOLD_ACQUISITION_METRICS}/channel_effectiveness",
+            ["channel_type", "year", "month"]
+        )
+    
+    return success
+
+if __name__ == "__main__":
+    # Get date from command line arguments or use default
+    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    process_date = get_date_to_process(date_arg)
+    
+    # Create acquisition metrics Gold layer
+    success = create_acquisition_metrics_gold(process_date)
+    
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)
