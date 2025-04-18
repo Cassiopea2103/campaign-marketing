@@ -53,7 +53,7 @@ wait_for_aggregation = ExternalTaskSensor(
 # Load gold data to Snowflake
 load_marketing_performance = SparkSubmitOperator(
     task_id='load_marketing_performance',
-    application='/src/etl/warehouse/load_marketing_performance.py',
+    application='/src/warehouse/load_marketing_performance.py',
     name='load_marketing_performance',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -62,12 +62,13 @@ load_marketing_performance = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 load_product_performance = SparkSubmitOperator(
     task_id='load_product_performance',
-    application='/src/etl/warehouse/load_product_performance.py',
+    application='/src/warehouse/load_product_performance.py',
     name='load_product_performance',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -76,12 +77,13 @@ load_product_performance = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 load_customer_segments = SparkSubmitOperator(
     task_id='load_customer_segments',
-    application='/src/etl/warehouse/load_customer_segments.py',
+    application='/src/warehouse/load_customer_segments.py',
     name='load_customer_segments',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -90,12 +92,13 @@ load_customer_segments = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
 load_campaign_roi = SparkSubmitOperator(
     task_id='load_campaign_roi',
-    application='/src/etl/warehouse/load_campaign_roi.py',
+    application='/src/warehouse/load_campaign_roi.py',
     name='load_campaign_roi',
     conn_id='spark_default',
     application_args=["{{ ds }}"],
@@ -104,6 +107,7 @@ load_campaign_roi = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
     dag=dag,
 )
 
