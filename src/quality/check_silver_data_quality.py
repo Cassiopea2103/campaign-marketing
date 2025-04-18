@@ -998,7 +998,7 @@ def check_silver_data_quality(process_date):
     issues = save_quality_report(quality_metrics, process_date)
     
     # Return success if no high severity issues
-    high_severity_issues = sum(1 for issue in issues if issue["severity"] == "HIGH")
+    high_severity_issues = len([issue for issue in issues if issue["severity"] == "HIGH"])
     return high_severity_issues == 0
 
 if __name__ == "__main__":
