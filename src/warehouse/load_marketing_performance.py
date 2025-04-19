@@ -101,11 +101,20 @@ def save_to_warehouse(dataframe, table_name):
     try:
         # Write to Snowflake using the Snowflake connector
         dataframe.write \
-            .format(SNOWFLAKE_URL) \
-            .options(**SNOWFLAKE_OPTIONS) \
-            .option("dbtable", table_name) \
-            .mode("overwrite") \
-            .save()
+          .format("snowflake") \
+          .options(**{
+              "sfUrl": SNOWFLAKE_OPTIONS["sfURL"],
+              "sfUser": SNOWFLAKE_OPTIONS["sfUser"],
+              "sfPassword": SNOWFLAKE_OPTIONS["sfPassword"],
+              "sfDatabase": SNOWFLAKE_OPTIONS["sfDatabase"] , 
+              "sfSchema": SNOWFLAKE_OPTIONS["sfSchema"],    
+              "sfWarehouse": SNOWFLAKE_OPTIONS["sfWarehouse"],
+              "dbtable": table_name
+          }) \
+          .mode("overwrite") \
+          .save()
+
+
             
         print(f"Successfully wrote {dataframe.count()} records to Snowflake table {table_name}")
         return True
