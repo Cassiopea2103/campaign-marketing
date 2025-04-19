@@ -607,14 +607,6 @@ if __name__ == "__main__":
     
     print(f"Starting marketing performance data load to Snowflake for date: {process_date.strftime('%Y-%m-%d')}")
     
-    # Add Snowflake JDBC driver dependency if needed
-    try:
-        spark.sparkContext.addPyFile("https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar")
-        spark.sparkContext.addPyFile("https://repo1.maven.org/maven2/net/snowflake/spark-snowflake_2.12/2.11.0-spark_3.3/spark-snowflake_2.12-2.11.0-spark_3.3.jar")
-        print("Added Snowflake JDBC dependencies to SparkContext")
-    except Exception as e:
-        print(f"Warning: Could not add Snowflake JDBC dependencies: {e}")
-    
     # Load data to warehouse
     success = load_marketing_performance_to_warehouse(process_date)
     
