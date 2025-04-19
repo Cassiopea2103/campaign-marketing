@@ -77,7 +77,7 @@ load_product_performance = SparkSubmitOperator(
         'spark.driver.memory': '1g',
         'spark.executor.memory': '1g',
     },
-    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar',
+    jars='/opt/jars/hadoop-aws-3.3.1.jar,/opt/jars/aws-java-sdk-bundle-1.11.901.jar,/opt/jars/wildfly-openssl-1.0.7.Final.jar,/opt/jars/snowflake-jdbc-3.13.30.jar,/opt/jars/spark-snowflake_2.12-2.12.0-spark_3.3.jar',
     dag=dag,
 )
 
